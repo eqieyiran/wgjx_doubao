@@ -1,0 +1,16 @@
+# 虚拟环境
+venv/
+
+# 系统文件
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 日志和数据
+logs/
+tasks/
+settings.json
+
+# PyCharm 配置
+.idea/
