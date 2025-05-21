@@ -56,18 +56,14 @@ class GroupManager:
         return groups
 
     def save_to_file(self, file_path="tasks.json"):
-        """将任务组结构保存到指定路径"""
-        from utils.persistence import save_task_groups
-        try:
-            # 临时替换默认路径保存
-            original_path = "tasks.json"
-            if file_path != original_path:
-                self._rename_temp_file(original_path, file_path)
-            save_task_groups(self)
-            return True
-        except Exception as e:
-            print(f"保存失败: {e}")
-            return False
+        """将任务组结构和任务保存为 JSON 文件"""
+        import json
+        data = {
+            "root_group": self.root_group.to_dict()
+        }
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+        return True
 
     def _rename_temp_file(self, old_path, new_path):
         """辅助方法：重命名临时保存路径"""
@@ -97,3 +93,26 @@ class GroupManager:
         if group:
             return group.tasks
         return []
+
+    def add_task_to_group(self, group_name, task):
+        """向指定任务组中添加任务"""
+        group = self.root_group.find_group(group_name)
+        if group:
+            group.tasks.append(task)
+
+    def update_task_order(self, group_name, ordered_task_ids):
+        """根据传入的有序 ID 列表更新任务顺序"""
+        group = self.root_group.find_group(group_name)
+        if not group:
+            return False
+
+        # 保持原任务对象不变，只调整顺序
+        ordered_tasks = []
+        for task_id in ordered_task_ids:
+            for task in group.tasks:
+                if task.id == task_id:
+                    ordered_tasks.append(task)
+                    break
+
+        group.tasks = ordered_tasks
+        return True

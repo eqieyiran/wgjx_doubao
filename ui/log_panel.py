@@ -1,7 +1,8 @@
 # ui/log_panel.py
-
+from PyQt5 import Qt
 from PyQt5.QtWidgets import QTextEdit, QCheckBox, QHBoxLayout, QVBoxLayout, QWidget
 from PyQt5.QtGui import QTextCharFormat, QColor, QTextCursor
+
 
 class LogPanel(QWidget):
     def __init__(self):
@@ -31,27 +32,35 @@ class LogPanel(QWidget):
         layout.addWidget(self.log_display)
 
     def log(self, level, message):
-        level = level.upper()
-        if (level == "INFO" and not self.info_checkbox.isChecked()) or \
-           (level == "WARNING" and not self.warning_checkbox.isChecked()) or \
-           (level == "ERROR" and not self.error_checkbox.isChecked()):
-            return
+        """根据日志级别设置颜色并输出信息"""
+        color_map = {
+            "INFO": QColor("#000000"),  # 黑色
+            "DEBUG": QColor("#808080"),  # 灰色
+            "WARNING": QColor("#FFA500"),  # 橙色
+            "ERROR": QColor("#FF0000"),  # 红色
+            "SUCCESS": QColor("#00FF00")  # 绿色
+        }
 
-        fmt = QTextCharFormat()
-        if level == "INFO":
-            fmt.setForeground(QColor("white"))
-        elif level == "WARNING":
-            fmt.setForeground(QColor("yellow"))
-        elif level == "ERROR":
-            fmt.setForeground(QColor("red"))
+        icon = {
+            "INFO": "ℹ️",
+            "DEBUG": "🛠️",
+            "WARNING": "⚠️",
+            "ERROR": "❌",
+            "SUCCESS": "✅"
+        }.get(level, "📝")
 
-        cursor = self.log_display.textCursor()
-        cursor.movePosition(QTextCursor.End)
-        cursor.mergeCharFormat(fmt)
-        cursor.insertText(f"[{level}] {message}\n")
-        self.log_display.verticalScrollBar().setValue(
-            self.log_display.verticalScrollBar().maximum()
-        )
+        full_text = f"{icon} [{level}] {message}"
+
+        text_cursor = self.log_display.textCursor()  # ✅ 改为 log_display 的 cursor
+        text_cursor.movePosition(QTextCursor.End)
+
+        fmt = self.log_display.currentCharFormat()  # ✅ 改为 log_display 的 format
+        fmt.setForeground(color_map.get(level, QColor("#000000")))
+        text_cursor.setCharFormat(fmt)
+
+        text_cursor.insertText(full_text + "\n")
+        self.log_display.setTextCursor(text_cursor)  # ✅ 设置回 log_display
+        self.log_display.ensureCursorVisible()  # ✅ 自动滚动到底部
 
     def export_log(self, file_path):
         with open(file_path, 'w') as f:

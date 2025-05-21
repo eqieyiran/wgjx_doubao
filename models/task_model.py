@@ -13,6 +13,13 @@ class TaskGroup:
         self.execution_rule = "continue"  # 执行规则: continue / all_success / any_success
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "id": self.id,
+            "children": [child.to_dict() for child in self.children],
+            "tasks": [task.to_dict() for task in self.tasks]
+        }
 
     def add_child(self, child_group):
         """添加子任务组"""
@@ -56,7 +63,16 @@ class Task:
         self.created_at = datetime.now()
         self.started_at = None
         self.completed_at = None
-
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "task_type": self.task_type,
+            "parameters": self.parameters,
+            "group": self.group,
+            "retry_count": self.retry_count,
+            "timeout": self.timeout
+        }
     def add_backup_task(self, task):
         """添加备份任务"""
         self.backup_tasks.append(task)

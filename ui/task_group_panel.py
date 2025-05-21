@@ -1,16 +1,66 @@
-from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu
+from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu, QAction
+from PyQt5.QtGui import QDrag
 from PyQt5.QtCore import Qt
 from utils.input_dialog import InputDialog
+from ui.task_edit_dialog import TaskEditDialog
+from PyQt5.QtCore import Qt, QMimeData
+
+
 
 class TaskGroupPanel(QTreeWidget):
-    def __init__(self, group_manager):
+    def __init__(self, group_manager, main_window):
         super().__init__()
         self.group_manager = group_manager
+        self.main_window = main_window  # ✅ 正确赋值# 保存 MainWindow 引用
         self.setHeaderLabel("任务组")
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
+        self.setAcceptDrops(True)
+        self.setDragEnabled(True)
+        self.setSelectionMode(QTreeWidget.SingleSelection)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(QTreeWidget.InternalMove)
 
         self.refresh()
+
+    def startDrag(self, supportedActions):
+        drag = QDrag(self)
+        mime_data = self.model().mimeData(self.selectedIndexes())
+        drag.setMimeData(mime_data)
+        drag.exec_(Qt.MoveAction)
+
+    def dropEvent(self, event):
+        """处理拖放事件，实现跨组移动任务"""
+        super().dropEvent(event)
+        source_index = self.selectedIndexes()[0]
+        target_index = self.indexAt(event.pos())
+
+        source_item = self.itemFromIndex(source_index)
+        target_item = self.itemFromIndex(target_index)
+
+        if not source_item or not target_item:
+            print("❌ 源或目标任务组为空")
+            return
+
+        source_group_name = source_item.parent().text(0) if source_item.parent() else "根任务组"
+        target_group_name = target_item.text(0)
+
+        task_name = source_item.text(0)
+        self.move_task_between_groups(source_group_name, target_group_name, task_name)
+
+    def move_task_between_groups(self, source_group, target_group, task_id):
+        """将任务从一个组移动到另一个组"""
+        source_group_obj = self.group_manager.root_group.find_group(source_group)
+        target_group_obj = self.group_manager.root_group.find_group(target_group)
+
+        if source_group_obj and target_group_obj:
+            for task in source_group_obj.tasks:
+                if task.id == task_id:
+                    source_group_obj.tasks.remove(task)
+                    target_group_obj.tasks.append(task)
+                    task.group = target_group
+                    break
+            self.main_window.update_task_list(self.group_manager.get_tasks_by_group(target_group))
 
     def refresh(self):
         """刷新任务组面板"""
@@ -18,7 +68,13 @@ class TaskGroupPanel(QTreeWidget):
         root_item = QTreeWidgetItem([self.group_manager.root_group.name])
         self.addTopLevelItem(root_item)
         self._build_tree(self.group_manager.root_group, root_item)
+        self._add_group_items(self.group_manager.root_group)
 
+    def _add_group_items(self, group, parent_item=None):
+        """递归添加任务组节点"""
+        item = QTreeWidgetItem(parent_item, [group.name])
+        for child in group.children:
+            self._add_group_items(child, item)
     def _build_tree(self, group, parent_item):
         """递归构建任务组树"""
         for child in group.children:
@@ -27,22 +83,37 @@ class TaskGroupPanel(QTreeWidget):
             self._build_tree(child, item)
 
     def show_context_menu(self, position):
-        menu = QMenu()
-        create_action = menu.addAction("新建任务组")
-        rename_action = menu.addAction("重命名")
-        delete_action = menu.addAction("删除")
+        """显示右键菜单"""
+        item = self.itemAt(position)
+        if not item:
+            return
+
+        menu = QMenu(self)
+
+        # 总是显示“新建任务”
+        new_task_action = QAction("新建任务", self)
+        menu.addAction(new_task_action)
+
+        # 如果不是根任务组，则显示其他操作
+        selected_name = item.text(0)
+        if selected_name != "根任务组":
+            menu.addSeparator()
+            create_action = menu.addAction("新建任务组")
+            rename_action = menu.addAction("重命名")
+            delete_action = menu.addAction("删除")
+        else:
+            create_action = rename_action = delete_action = None
 
         action = menu.exec_(self.viewport().mapToGlobal(position))
-        item = self.itemAt(position)
-        selected_name = item.text(0) if item else ""
 
-        if action == create_action:
+        if action == new_task_action:
+            self.on_new_task(selected_name)
+        elif action == create_action:
             parent_name = selected_name if item else "根任务组"
             new_name, ok = InputDialog.getText(self, "新建任务组", "请输入任务组名称:")
             if ok and new_name:
                 self.group_manager.create_group(new_name, parent_name)
                 self.refresh()
-
         elif action == rename_action:
             if selected_name == "根任务组":
                 return
@@ -53,7 +124,6 @@ class TaskGroupPanel(QTreeWidget):
                     self.refresh()
                 except Exception as e:
                     print(f"重命名失败: {e}")
-
         elif action == delete_action:
             if selected_name == "根任务组":
                 return
@@ -61,3 +131,29 @@ class TaskGroupPanel(QTreeWidget):
             if confirm:
                 self.group_manager.delete_group(selected_name)
                 self.refresh()
+
+    def on_new_task(self, group_name):
+        """处理新建任务操作"""
+        dialog = TaskEditDialog(self)
+        if dialog.exec_() == TaskEditDialog.Accepted:
+            task_data = dialog.get_task_data()
+            try:
+                from models.task_model import Task
+                import json
+                parameters = json.loads(task_data["parameters"])
+
+                new_task = Task(
+                    name=task_data["name"],
+                    task_type=task_data["task_type"],
+                    parameters=parameters,
+                    group=group_name
+                )
+                self.group_manager.add_task_to_group(group_name, new_task)
+
+                # ✅ 改为使用 main_window 调用 update_task_list
+                try:
+                    self.main_window.update_task_list(self.group_manager.get_tasks_by_group(group_name))
+                except AttributeError as e:
+                    print("MainWindow 中未定义 update_task_list 方法")
+            except Exception as e:
+                print(f"新建任务失败: {e}")
