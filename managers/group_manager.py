@@ -3,7 +3,7 @@ from models.task_model import TaskGroup  # 缺失的导入语句
 class GroupManager:
     def __init__(self):
         self.root_group = TaskGroup("根任务组")
-
+        self._init_mock_data()
     def create_group(self, name, parent_name=None):
         """创建新任务组，可指定父组名"""
         parent = self.root_group
@@ -74,3 +74,26 @@ class GroupManager:
         import shutil
         if old_path != new_path:
             shutil.copy(old_path, new_path)
+
+    def _init_mock_data(self):
+        # 初始化一些模拟任务数据（用于演示）
+        from models.task_model import Task
+        daily_group = self.create_group("日常任务")
+        weekly_group = self.create_group("周常任务")
+
+        daily_group.tasks = [
+            Task("T001", "每日签到", "click", group="日常任务"),
+            Task("T002", "每日副本", "match", group="日常任务")
+        ]
+
+        weekly_group.tasks = [
+            Task("T003", "周常副本", "match", group="周常任务"),
+            Task("T004", "周常挑战", "click", group="周常任务")
+        ]
+
+    def get_tasks_by_group(self, group_name):
+        """根据任务组名获取任务列表"""
+        group = self.root_group.find_group(group_name)
+        if group:
+            return group.tasks
+        return []

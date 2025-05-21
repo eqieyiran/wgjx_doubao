@@ -3,16 +3,15 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QShortcut,
     QComboBox, QSlider, QCheckBox, QPushButton,
-    QTableView, QHeaderView, QSplitter, QFrame, QApplication
+    QTableView, QHeaderView, QSplitter, QFrame, QApplication, QFileDialog
 )
 from PyQt5.QtCore import Qt, QSortFilterProxyModel, QSettings
-from PyQt5.QtGui import QStandardItemModel
+from PyQt5.QtGui import QKeySequence
+from PyQt5.QtGui import QStandardItemModel, QStandardItem
 from ui.log_panel import LogPanel
 from managers.group_manager import GroupManager
 from ui.task_group_panel import TaskGroupPanel
-from PyQt5.QtGui import QStandardItemModel, QStandardItem  # ✅ 正确导入位置
 from utils.persistence import save_task_groups, load_task_groups
-from PyQt5.QtGui import QKeySequence
 
 
 class MainWindow(QMainWindow):
@@ -25,10 +24,6 @@ class MainWindow(QMainWindow):
         # 尝试恢复窗口位置和大小
         self.restore_window_state()
 
-        # 初始化其他内容
-        self.setWindowTitle("自动化任务辅助工具")
-        self.resize(1200, 800)  # 默认大小
-
         # 初始化管理器
         loaded_group = load_task_groups()
         if loaded_group:
@@ -36,9 +31,54 @@ class MainWindow(QMainWindow):
             self.group_manager.root_group = loaded_group
         else:
             self.group_manager = GroupManager()
+            from models.task_model import Task
+
+            daily_group = self.group_manager.create_group("日常任务")
+            weekly_group = self.group_manager.create_group("周常任务")
+
+            daily_group.tasks = [
+                Task(name="每日签到", task_type="click", parameters={"location": (100, 200)}, group="日常任务"),
+                Task(name="每日副本", task_type="match", parameters={"template": "daily.png"}, group="日常任务")
+            ]
+
+            weekly_group.tasks = [
+                Task(name="周常副本", task_type="match", parameters={"template": "weekly.png"}, group="周常任务"),
+                Task(name="周常挑战", task_type="click", parameters={"location": (300, 400)}, group="周常任务")
+            ]
+
+        # 左侧面板：任务组树状结构
+        self.group_panel = TaskGroupPanel(self.group_manager)
+        self.group_panel.itemClicked.connect(self.on_group_selected)
+
+        # 初始化其他内容
+        self.setWindowTitle("自动化任务辅助工具")
 
         self.init_ui()
         self.setup_shortcuts()
+
+        # ✅ 添加这一行，在 UI 初始化后主动加载任务
+        self.update_task_list(self._get_all_tasks())
+
+    def on_group_selected(self, item, column):
+        """当用户点击任务组时触发"""
+        selected_group_name = item.text(column)
+        if selected_group_name == "根任务组":
+            tasks = self._get_all_tasks()
+        else:
+            tasks = self.group_manager.get_tasks_by_group(selected_group_name)
+
+        self.update_task_list(tasks)
+
+    def _get_all_tasks(self):
+        """递归获取所有任务"""
+
+        def collect(group):
+            tasks = list(group.tasks)
+            for child in group.children:
+                tasks.extend(collect(child))
+            return tasks
+
+        return collect(self.group_manager.root_group)
 
     def restore_window_state(self):
         """从 QSettings 中恢复窗口大小和位置"""
@@ -46,12 +86,12 @@ class MainWindow(QMainWindow):
             geometry = self.settings.value("window/geometry")
             self.restoreGeometry(geometry)
         else:
-            # 如果没有历史记录，则居中显示
             screen = QApplication.primaryScreen().geometry()
             window_width, window_height = 1200, 800
             x = (screen.width() - window_width) // 2
             y = (screen.height() - window_height) // 2
             self.setGeometry(x, y, window_width, window_height)
+
     def init_ui(self):
         # 主容器
         main_widget = QWidget()
@@ -66,7 +106,6 @@ class MainWindow(QMainWindow):
         splitter = QSplitter(Qt.Horizontal)
 
         # 左侧面板：任务组树状结构
-        self.group_panel = TaskGroupPanel(self.group_manager)
         group_frame = QFrame()
         group_frame.setLayout(QVBoxLayout())
         group_frame.layout().addWidget(self.group_panel)
@@ -96,11 +135,13 @@ class MainWindow(QMainWindow):
         self.save_button.setObjectName("saveButton")
         self.save_button.clicked.connect(self.save_current_groups)
         control_layout.addWidget(self.save_button)  # 将按钮加到控制栏中
+
         # 添加“另存为”按钮
         self.save_as_button = QPushButton("另存为...")
         self.save_as_button.setObjectName("saveAsButton")
         self.save_as_button.clicked.connect(self.save_current_groups_as)
         control_layout.addWidget(self.save_as_button)
+
         # ===== 样式加载 =====
         try:
             with open("resources/style.qss", "r", encoding="utf-8") as f:
@@ -110,8 +151,6 @@ class MainWindow(QMainWindow):
 
     def save_current_groups_as(self):
         """手动触发“另存为”操作"""
-        from PyQt5.QtWidgets import QFileDialog
-
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "另存为任务组",
@@ -198,6 +237,7 @@ class MainWindow(QMainWindow):
 
     def update_task_list(self, tasks):
         """更新任务列表"""
+        print(f"正在更新任务数量: {len(tasks)}")  # ✅ 添加调试信息
         self.table_model.removeRows(0, self.table_model.rowCount())
 
         for task in tasks:
@@ -231,9 +271,6 @@ class MainWindow(QMainWindow):
 
     def save_current_groups(self):
         """手动触发保存任务组结构"""
-        from PyQt5.QtWidgets import QFileDialog
-
-        # 默认路径是 tasks.json，也可以让用户选择
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "保存任务组",

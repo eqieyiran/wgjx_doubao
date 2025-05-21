@@ -1,7 +1,7 @@
-from datetime import datetime
-import uuid
+# models/task_model.py
 
 from datetime import datetime
+import uuid
 
 class TaskGroup:
     def __init__(self, name, parent=None):
@@ -40,6 +40,7 @@ class TaskGroup:
         self.name = new_name
         self.updated_at = datetime.now()
 
+
 class Task:
     def __init__(self, name, task_type, parameters, group=None, retry_count=3,
                  timeout=300, backup_tasks=None):
@@ -63,5 +64,3 @@ class Task:
     def remove_backup_task(self, task_id):
         """移除指定备份任务"""
         self.backup_tasks = [t for t in self.backup_tasks if t.id != task_id]
-
-
