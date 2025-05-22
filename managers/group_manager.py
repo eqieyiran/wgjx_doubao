@@ -1,19 +1,81 @@
 from models.task_model import TaskGroup  # 缺失的导入语句
+from utils.persistence import save_task_groups
+
 
 class GroupManager:
     def __init__(self):
         self.root_group = TaskGroup("根任务组")
-        self._init_mock_data()
-    def create_group(self, name, parent_name=None):
-        """创建新任务组，可指定父组名"""
-        parent = self.root_group
-        if parent_name and parent_name != "根任务组":
-            parent = self.root_group.find_group(parent_name)
-            if not parent:
-                raise ValueError(f"找不到父组 '{parent_name}'")
-        new_group = TaskGroup(name, parent=parent)
-        parent.add_child(new_group)
-        return new_group
+
+    def find_group_by_name(self, group_name):
+        """
+        根据名称查找任务组
+        """
+
+        def _search(group):
+            if group.name == group_name:
+                return group
+            for child in group.children:
+                result = _search(child)
+                if result:
+                    return result
+            return None
+
+        return _search(self.root_group)
+
+    def create_group(self, name):
+        group = TaskGroup(name, parent=self.root_group)
+        self.root_group.add_child(group)
+        return group
+
+    def get_all_groups(self):
+        def collect(group):
+            groups = [group]
+            for child in group.children:
+                groups.extend(collect(child))
+            return groups
+
+        return collect(self.root_group)
+
+    def get_tasks_by_group(self, group_name):
+        def find(group):
+            if group.name == group_name:
+                return group.tasks
+            for child in group.children:
+                result = find(child)
+                if result is not None:
+                    return result
+            return None
+
+        return find(self.root_group) or []
+
+    # 👇 新增方法：设置某个分组的任务列表
+    def set_tasks_for_group(self, group_name, tasks):
+        def find_and_update(group):
+            if group.name == group_name:
+                group.tasks = tasks
+                return True
+            for child in group.children:
+                if find_and_update(child):
+                    return True
+            return False
+
+        if not find_and_update(self.root_group):
+            print(f"❌ 未找到名为 '{group_name}' 的任务组")
+
+
+
+
+
+    # def create_group(self, name, parent_name=None):
+    #     """创建新任务组，可指定父组名"""
+    #     parent = self.root_group
+    #     if parent_name and parent_name != "根任务组":
+    #         parent = self.root_group.find_group(parent_name)
+    #         if not parent:
+    #             raise ValueError(f"找不到父组 '{parent_name}'")
+    #     new_group = TaskGroup(name, parent=parent)
+    #     parent.add_child(new_group)
+    #     return new_group
 
     def delete_group(self, group_name):
         """删除指定名称的任务组"""
@@ -43,27 +105,23 @@ class GroupManager:
             raise ValueError(f"找不到任务组 '{old_name}'")
         group.rename(new_name)
 
-    def get_all_groups(self):
-        """获取所有任务组（扁平化列表）"""
-        groups = []
-
-        def traverse(group):
-            groups.append(group)
-            for child in group.children:
-                traverse(child)
-
-        traverse(self.root_group)
-        return groups
+    # def get_all_groups(self):
+    #     """获取所有任务组（扁平化列表）"""
+    #     groups = []
+    #
+    #     def traverse(group):
+    #         groups.append(group)
+    #         for child in group.children:
+    #             traverse(child)
+    #
+    #     traverse(self.root_group)
+    #     return groups
 
     def save_to_file(self, file_path="tasks.json"):
-        """将任务组结构和任务保存为 JSON 文件"""
-        import json
-        data = {
-            "root_group": self.root_group.to_dict()
-        }
-        with open(file_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-        return True
+        """
+        将当前任务组结构保存到文件
+        """
+        return save_task_groups(self, file_path)
 
     def _rename_temp_file(self, old_path, new_path):
         """辅助方法：重命名临时保存路径"""
@@ -72,27 +130,52 @@ class GroupManager:
             shutil.copy(old_path, new_path)
 
     def _init_mock_data(self):
-        # 初始化一些模拟任务数据（用于演示）
+        """初始化一些模拟任务数据（用于演示）"""
         from models.task_model import Task
+
         daily_group = self.create_group("日常任务")
         weekly_group = self.create_group("周常任务")
 
         daily_group.tasks = [
-            Task("T001", "每日签到", "click", group="日常任务"),
-            Task("T002", "每日副本", "match", group="日常任务")
+            Task(
+                tid="T001",
+                name="每日签到",
+                task_type="click",
+                parameters={"location": (100, 200)},
+                group="日常任务"
+            ),
+            Task(
+                tid="T002",
+                name="每日签到2",
+                task_type="click",
+                parameters={"location": (100, 200)},
+                group="日常任务"
+            )
         ]
 
         weekly_group.tasks = [
-            Task("T003", "周常副本", "match", group="周常任务"),
-            Task("T004", "周常挑战", "click", group="周常任务")
+            Task(
+                tid="T003",
+                name="周常副本",
+                task_type="match",
+                parameters={"template": "weekly.png"},
+                group="周常任务"
+            ),
+            Task(
+                tid="T004",
+                name="周常挑战",
+                task_type="click",
+                parameters={"location": (300, 400)},
+                group="周常任务"
+            )
         ]
 
-    def get_tasks_by_group(self, group_name):
-        """根据任务组名获取任务列表"""
-        group = self.root_group.find_group(group_name)
-        if group:
-            return group.tasks
-        return []
+    # def get_tasks_by_group(self, group_name):
+    #     """根据任务组名获取任务列表"""
+    #     group = self.root_group.find_group(group_name)
+    #     if group:
+    #         return group.tasks
+    #     return []
 
     def add_task_to_group(self, group_name, task):
         """向指定任务组中添加任务"""

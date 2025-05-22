@@ -1,48 +1,46 @@
-import json
+# utils/persistence.py
+
 import os
+import json
+from PyQt5.QtWidgets import QMessageBox
+
 
 TASKS_JSON_PATH = "tasks.json"
 
-def save_task_groups(group_manager, file_path="tasks.json"):
-    """将任务组结构保存到 JSON 文件"""
-    def serialize_group(group):
-        return {
-            "name": group.name,
-            "execution_rule": group.execution_rule,
-            "children": [serialize_group(child) for child in group.children]
-            # 可扩展保存更多字段如 tasks 列表等
+
+def save_task_groups(group_manager, file_path=TASKS_JSON_PATH):
+    try:
+        data = {
+            "root_group": group_manager.root_group.to_dict()
         }
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+        print(f"✅ 任务组已保存至 {file_path}")
+        return True
+    except Exception as e:
+        print(f"❌ 保存失败: {e}")
+        return False
 
-
-    root_data = serialize_group(group_manager.root_group)
-
-    with open(TASKS_JSON_PATH, "w", encoding="utf-8") as f:
-        json.dump(root_data, f, ensure_ascii=False, indent=4)
 
 def load_task_groups():
-    """从文件加载任务组结构（包含任务）"""
-    import os
-    import json
-    from models.task_model import TaskGroup, Task
-
-    if not os.path.exists("tasks.json"):
+    if not os.path.exists(TASKS_JSON_PATH):
+        print("✅ 文件不存在，使用默认任务组")
         return None
 
-    with open("tasks.json", 'r', encoding='utf-8') as f:
-        try:
+    try:
+        with open(TASKS_JSON_PATH, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            if "root_group" not in data:
-                print("文件中缺少 'root_group' 字段")
+            root_group_data = data.get("root_group")
+            if not root_group_data:
+                print("⚠️ JSON 中缺少 'root_group' 字段")
                 return None
 
-            def dict_to_group(d):
-                group = TaskGroup(d["name"])
-                group.id = d.get("id", group.id)
-                group.tasks = [Task(**t) for t in d.get("tasks", [])]
-                group.children = [dict_to_group(child) for child in d.get("children", [])]
-                return group
+            from models.task_model import TaskGroup
+            return TaskGroup.from_dict(root_group_data)
+    except json.JSONDecodeError as je:
+        print(f"❌ JSON 解码失败: {je}")
+    except Exception as e:
+        print(f"❌ 加载失败: {e}")
 
-            return dict_to_group(data["root_group"])
-        except json.JSONDecodeError:
-            print("无法解析 JSON 文件内容")
-            return None
+    print("⚠️ 使用默认任务组替代损坏配置")
+    return None

@@ -4,13 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="c1697330-b86e-4476-88f9-e8ba681dab37" name="更改" comment="已显示模拟任务">
-      <change afterPath="$PROJECT_DIR$/engine/task_executor.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/ui/task_edit_dialog.py" afterDir="false" />
+    <list default="true" id="c1697330-b86e-4476-88f9-e8ba681dab37" name="更改" comment="支持执行任务，显示日志。">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/managers/group_manager.py" beforeDir="false" afterPath="$PROJECT_DIR$/managers/group_manager.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/models/task_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/models/task_model.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/ui/log_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/log_panel.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ui/main_window.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/main_window.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ui/task_group_panel.py" beforeDir="false" afterPath="$PROJECT_DIR$/ui/task_group_panel.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/utils/persistence.py" beforeDir="false" afterPath="$PROJECT_DIR$/utils/persistence.py" afterDir="false" />
@@ -49,6 +46,7 @@
     "ModuleVcsDetector.initialDetectionPerformed": "true",
     "Python.convert_to_utf8.executor": "Run",
     "Python.main.executor": "Debug",
+    "Python.parse.executor": "Debug",
     "Python.task_group_panel.executor": "Run",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
@@ -76,7 +74,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1747825273857</updated>
-      <workItem from="1747825274860" duration="22965000" />
+      <workItem from="1747825274860" duration="42281000" />
     </task>
     <task id="LOCAL-00001" summary="任务组已生效。">
       <option name="closed" value="true" />
@@ -94,7 +92,15 @@
       <option name="project" value="LOCAL" />
       <updated>1747837135108</updated>
     </task>
-    <option name="localTasksCounter" value="3" />
+    <task id="LOCAL-00003" summary="支持执行任务，显示日志。">
+      <option name="closed" value="true" />
+      <created>1747848473783</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1747848473783</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
@@ -114,11 +120,13 @@
   <component name="VcsManagerConfiguration">
     <MESSAGE value="任务组已生效。" />
     <MESSAGE value="已显示模拟任务" />
-    <option name="LAST_COMMIT_MESSAGE" value="已显示模拟任务" />
+    <MESSAGE value="支持执行任务，显示日志。" />
+    <option name="LAST_COMMIT_MESSAGE" value="支持执行任务，显示日志。" />
   </component>
   <component name="com.intellij.coverage.CoverageDataManagerImpl">
-    <SUITE FILE_PATH="coverage/wgjx_lingma$main.coverage" NAME="main 覆盖结果" MODIFIED="1747848292851" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/wgjx_lingma$main.coverage" NAME="main 覆盖结果" MODIFIED="1747905271419" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
     <SUITE FILE_PATH="coverage/wgjx_lingma$convert_to_utf8.coverage" NAME="convert_to_utf8 覆盖结果" MODIFIED="1747829273248" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/managers" />
+    <SUITE FILE_PATH="coverage/wgjx_lingma$parse.coverage" NAME="parse 覆盖结果" MODIFIED="1747899236841" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$USER_HOME$/AppData/Local/Programs/Python/Python313/Lib/urllib" />
     <SUITE FILE_PATH="coverage/wgjx_lingma$task_group_panel.coverage" NAME="task_group_panel 覆盖结果" MODIFIED="1747841833810" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="false" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/ui" />
   </component>
 </project>

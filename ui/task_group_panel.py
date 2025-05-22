@@ -1,20 +1,21 @@
 from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu, QAction
 from PyQt5.QtGui import QDrag
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QMimeData
 from utils.input_dialog import InputDialog
 from ui.task_edit_dialog import TaskEditDialog
-from PyQt5.QtCore import Qt, QMimeData
-
 
 
 class TaskGroupPanel(QTreeWidget):
     def __init__(self, group_manager, main_window):
         super().__init__()
         self.group_manager = group_manager
-        self.main_window = main_window  # ✅ 正确赋值# 保存 MainWindow 引用
+        self.main_window = main_window
+
         self.setHeaderLabel("任务组")
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
+
+        # 拖放支持
         self.setAcceptDrops(True)
         self.setDragEnabled(True)
         self.setSelectionMode(QTreeWidget.SingleSelection)
@@ -23,7 +24,32 @@ class TaskGroupPanel(QTreeWidget):
 
         self.refresh()
 
-    def startDrag(self, supportedActions):
+    def refresh(self):
+        """刷新任务组面板"""
+        self.clear()
+        root_item = QTreeWidgetItem([self.group_manager.root_group.name])
+        self.addTopLevelItem(root_item)
+
+        # 构建整个树结构
+        self._build_tree(self.group_manager.root_group, root_item)
+
+    def _build_tree(self, group, parent_item):
+        for child in group.children:
+            existing_item = None
+            for i in range(parent_item.childCount()):
+                if parent_item.child(i).text(0) == child.name:
+                    existing_item = parent_item.child(i)
+                    break
+
+            if existing_item:
+                self._build_tree(child, existing_item)
+            else:
+                new_item = QTreeWidgetItem([child.name])
+                parent_item.addChild(new_item)
+                self._build_tree(child, new_item)
+
+    def startDrag(self, supported_actions):
+        """开始拖拽操作"""
         drag = QDrag(self)
         mime_data = self.model().mimeData(self.selectedIndexes())
         drag.setMimeData(mime_data)
@@ -32,6 +58,7 @@ class TaskGroupPanel(QTreeWidget):
     def dropEvent(self, event):
         """处理拖放事件，实现跨组移动任务"""
         super().dropEvent(event)
+
         source_index = self.selectedIndexes()[0]
         target_index = self.indexAt(event.pos())
 
@@ -45,8 +72,8 @@ class TaskGroupPanel(QTreeWidget):
         source_group_name = source_item.parent().text(0) if source_item.parent() else "根任务组"
         target_group_name = target_item.text(0)
 
-        task_name = source_item.text(0)
-        self.move_task_between_groups(source_group_name, target_group_name, task_name)
+        task_id = source_item.text(0)  # 假设显示的是 task.id
+        self.move_task_between_groups(source_group_name, target_group_name, task_id)
 
     def move_task_between_groups(self, source_group, target_group, task_id):
         """将任务从一个组移动到另一个组"""
@@ -60,27 +87,9 @@ class TaskGroupPanel(QTreeWidget):
                     target_group_obj.tasks.append(task)
                     task.group = target_group
                     break
+
+            # 刷新任务列表
             self.main_window.update_task_list(self.group_manager.get_tasks_by_group(target_group))
-
-    def refresh(self):
-        """刷新任务组面板"""
-        self.clear()
-        root_item = QTreeWidgetItem([self.group_manager.root_group.name])
-        self.addTopLevelItem(root_item)
-        self._build_tree(self.group_manager.root_group, root_item)
-        self._add_group_items(self.group_manager.root_group)
-
-    def _add_group_items(self, group, parent_item=None):
-        """递归添加任务组节点"""
-        item = QTreeWidgetItem(parent_item, [group.name])
-        for child in group.children:
-            self._add_group_items(child, item)
-    def _build_tree(self, group, parent_item):
-        """递归构建任务组树"""
-        for child in group.children:
-            item = QTreeWidgetItem([child.name])
-            parent_item.addChild(item)
-            self._build_tree(child, item)
 
     def show_context_menu(self, position):
         """显示右键菜单"""
@@ -94,7 +103,6 @@ class TaskGroupPanel(QTreeWidget):
         new_task_action = QAction("新建任务", self)
         menu.addAction(new_task_action)
 
-        # 如果不是根任务组，则显示其他操作
         selected_name = item.text(0)
         if selected_name != "根任务组":
             menu.addSeparator()
@@ -150,10 +158,9 @@ class TaskGroupPanel(QTreeWidget):
                 )
                 self.group_manager.add_task_to_group(group_name, new_task)
 
-                # ✅ 改为使用 main_window 调用 update_task_list
                 try:
                     self.main_window.update_task_list(self.group_manager.get_tasks_by_group(group_name))
-                except AttributeError as e:
+                except AttributeError:
                     print("MainWindow 中未定义 update_task_list 方法")
             except Exception as e:
                 print(f"新建任务失败: {e}")
