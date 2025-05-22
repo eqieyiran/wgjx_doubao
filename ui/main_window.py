@@ -364,13 +364,11 @@ class MainWindow(QMainWindow):
             print("❌ 源或目标任务组为空")
             return
 
-        # 获取当前任务所属的分组
         group = self.group_manager.find_group_by_name(task.group)
         if not group:
             print("❌ 找不到对应的任务组")
             return
 
-        # 在该分组内部查找并移动
         tasks = group.tasks[:]
         for i, t in enumerate(tasks):
             if t.id == task_id:
@@ -435,7 +433,6 @@ class MainWindow(QMainWindow):
         :param force_dialog: 是否强制弹出选择路径对话框
         """
         if not force_dialog and self.current_save_path:
-            # 自动保存到上次路径
             success = self.group_manager.save_to_file(self.current_save_path)
             if success:
                 self.log_message("INFO", f"✅ 已自动保存至 {self.current_save_path}")
@@ -443,7 +440,6 @@ class MainWindow(QMainWindow):
                 self.log_message("ERROR", "❌ 自动保存失败")
             return
 
-        # 否则弹出保存对话框
         path, _ = QFileDialog.getSaveFileName(self, "保存任务组", self.current_save_path, "JSON (*.json)")
         if path:
             self.current_save_path = path
@@ -469,18 +465,8 @@ class TaskTableView(QTableView):
         self.setDragDropMode(QTableView.InternalMove)
         self.setDefaultDropAction(Qt.MoveAction)
 
-    def dragMoveEvent(self, event):
-        if event.mimeData().hasFormat("application/x-qabstractitemmodeldatalist"):
-            event.accept()
-        else:
-            event.ignore()
-
     def dropEvent(self, event):
-        if event.mimeData().hasFormat("application/x-qabstractitemmodeldatalist"):
-            event.accept()
-            super().dropEvent(event)
-            current_index = self.currentIndex()
-            if current_index.isValid() and self.main_window:
-                self.main_window.move_task_row(current_index.row(), 0)
-        else:
-            event.ignore()
+        super().dropEvent(event)
+        current_index = self.currentIndex()
+        if current_index.isValid() and self.main_window:
+            self.main_window.move_task_row(current_index.row(), 0)
