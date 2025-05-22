@@ -56,5 +56,12 @@ class GroupManager:
             return True
         return False
 
+    def remove_task_from_group(self, group_name, task_id):
+        group = self.find_group_by_name(group_name)
+        if group:
+            group.tasks = [t for t in group.tasks if t.id != task_id]
+            return True
+        return False
+
     def save_to_file(self, file_path="tasks.json"):
         return save_task_groups(self, file_path)

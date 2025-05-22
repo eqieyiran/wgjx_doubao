@@ -381,10 +381,28 @@ class MainWindow(QMainWindow):
         self.update_task_list(self._get_all_tasks())
 
     def delete_task_row(self, row):
-        proxy = self.task_table.model()
-        source = proxy.sourceModel()
-        source.removeRow(row)
-        self._update_task_order_in_group(source)
+        proxy_model = self.task_table.model()
+        source_model = proxy_model.sourceModel()
+        task_item = source_model.item(row, 0)
+
+        if not task_item:
+            return
+
+        task_id = task_item.text()
+        task = self.find_task_by_id(task_id)
+
+        if not task or not task.group:
+            print("❌ 源任务组为空")
+            return
+
+        # 从任务组中移除任务
+        success = self.group_manager.remove_task_from_group(task.group, task_id)
+        if success:
+            source_model.removeRow(row)
+            self.save_current_groups(force_dialog=False)
+            print(f"✅ 已删除任务 {task_id}")
+        else:
+            print(f"❌ 删除任务 {task_id} 失败")
 
     def _update_task_order_in_group(self, source_model):
         updated_ids = [source_model.item(i, 0).text() for i in range(source_model.rowCount())]

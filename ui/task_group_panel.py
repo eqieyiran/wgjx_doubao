@@ -1,7 +1,7 @@
 # ui/task_group_panel.py
 
-from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu, QAction
-from PyQt5.QtCore import Qt, QMimeData
+from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu, QAction, QWidgetAction, QComboBox
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDrag
 from utils.input_dialog import InputDialog
 from ui.task_edit_dialog import TaskEditDialog
@@ -93,10 +93,27 @@ class TaskGroupPanel(QTreeWidget):
             menu.addAction("重命名")
             menu.addAction("删除")
 
+            # 添加“移动到其他分组”选项
+            move_to_submenu = menu.addMenu("移动到其他分组")
+
+            all_groups = self.group_manager.get_all_groups()
+            for group in all_groups:
+                if group.name != selected_name:
+                    action = move_to_submenu.addAction(group.name)
+                    action.setData(group.name)
+
+            # 绑定信号
+            move_to_submenu.triggered.connect(lambda act: self.on_move_to_group(act.data(), item.text(0)))
+
         action = menu.exec_(self.viewport().mapToGlobal(position))
 
         if action == new_task_action:
-            self.on_new_task(selected_name=item.text(0))
+            self.on_new_task(group_name=item.text(0))  # ✅ 这里改成 group_name
+
+    def on_move_to_group(self, target_group_name, task_id):
+        source_group_name = self.itemFromIndex(self.selectedIndexes()[0]).parent().text(0)
+        self.move_task_between_groups(source_group_name, target_group_name, task_id)
+        self.main_window.save_current_groups(force_dialog=False)
 
     def on_new_task(self, group_name):
         dialog = TaskEditDialog(self)
