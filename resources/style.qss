@@ -1,0 +1,50 @@
+/* resources/style.qss */
+
+/* 主窗口背景 */
+QMainWindow {
+    background-color: #e6f2ff; /* 浅蓝色背景 */
+}
+
+/* 按钮样式 */
+QPushButton {
+    background-color: #b3d9ff;
+    border: 1px solid #80c1ff;
+    padding: 5px;
+    border-radius: 4px;
+    color: #003366;
+}
+
+QPushButton:hover {
+    background-color: #99ccff;
+}
+
+/* 下拉框样式 */
+QComboBox {
+    background-color: #cce0ff;
+    border: 1px solid #80c1ff;
+    padding: 4px;
+    color: #003366;
+}
+
+/* 滑动条样式 */
+QSlider::handle:horizontal {
+    background-color: #80c1ff;
+    width: 14px;
+    height: 14px;
+    margin: -5px 0;
+    border-radius: 7px;
+}
+
+/* 表格视图样式 */
+QTableView {
+    background-color: #f0f8ff;
+    alternate-background-color: #d9ecff;
+    selection-background-color: #a3d5ff;
+    color: #003366;
+}
+
+/* 日志面板样式 */
+#logDisplay {
+    background-color: #ffffff;
+    color: #003366;
+}
