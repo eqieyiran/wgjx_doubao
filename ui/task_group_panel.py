@@ -87,25 +87,26 @@ class TaskGroupPanel(QTreeWidget):
         menu.addAction(new_task_action)
 
         selected_name = item.text(0)
-        if selected_name != "根任务组":
+        # 只要不是空白点击，就显示其他菜单项
+        if item:
             menu.addSeparator()
 
-            # 新建任务组
+            # 新建任务组（即使在根任务组上也允许创建）
             new_group_action = menu.addAction("新建任务组")
             new_group_action.triggered.connect(lambda _: self.on_new_group(selected_name))
 
-            # 删除任务组
-            delete_group_action = menu.addAction("删除任务组")
-            delete_group_action.triggered.connect(lambda: self.on_delete_group(selected_name))
+            if selected_name != "根任务组":
+                # 删除任务组等其他操作
+                delete_group_action = menu.addAction("删除任务组")
+                delete_group_action.triggered.connect(lambda: self.on_delete_group(selected_name))
 
-            # 移动到其他分组
-            move_to_submenu = menu.addMenu("移动到其他分组")
-            all_groups = self.group_manager.get_all_groups()
-            for group in all_groups:
-                if group.name != selected_name:
-                    action = move_to_submenu.addAction(group.name)
-                    action.setData(group.name)
-            move_to_submenu.triggered.connect(lambda act: self.on_move_to_group(act.data(), item.text(0)))
+                move_to_submenu = menu.addMenu("移动到其他分组")
+                all_groups = self.group_manager.get_all_groups()
+                for group in all_groups:
+                    if group.name != selected_name:
+                        action = move_to_submenu.addAction(group.name)
+                        action.setData(group.name)
+                move_to_submenu.triggered.connect(lambda act: self.on_move_to_group(act.data(), item.text(0)))
 
         action = menu.exec_(self.viewport().mapToGlobal(position))
 

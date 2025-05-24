@@ -107,3 +107,4 @@ class TaskEditDialog(QDialog):
             "parameters": self.param_input.text(),
             "group": self.group_combo.currentText()
         }
+
