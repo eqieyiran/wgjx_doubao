@@ -24,12 +24,15 @@ class Task:
         self.created_at = datetime.now()
         self.started_at = None
         self.completed_at = None
+        print(f"✅ 创建任务 [{self.name}] (ID: {self.id}), 类型: {self.task_type}, 分组: {self.group}")
 
     @staticmethod
     def generate_unique_id():
         return str(uuid.uuid4())[:8]
 
     def to_dict(self):
+        """将任务序列化为字典"""
+        print(f"💾 任务 [{self.name}] 序列化")
         return {
             "tid": self.tid,
             "name": self.name,
@@ -46,6 +49,8 @@ class Task:
 
     @classmethod
     def from_dict(cls, data):
+        """从字典恢复任务对象"""
+        print(f"🔄 恢复任务 [{data.get('name', '未知')}], ID: {data.get('tid')}")
         task = cls(
             tid=data.get("tid"),
             name=data.get("name", ""),
@@ -88,9 +93,11 @@ class TaskGroup:
         self.execution_rule = "continue"  # 执行规则（continue/skip_on_fail）
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
+        print(f"✅ 创建任务组 [{self.name}], ID: {self.id}")
 
     def to_dict(self):
         """将 TaskGroup 对象序列化为字典"""
+        print(f"💾 任务组 [{self.name}] 序列化")
         return {
             "name": self.name,
             "children": [child.to_dict() for child in self.children],
@@ -100,6 +107,7 @@ class TaskGroup:
     @classmethod
     def from_dict(cls, data, parent=None):
         """从字典恢复 TaskGroup 对象"""
+        print(f"🔄 恢复任务组 [{data['name']}]")
         group = cls(data["name"], parent)
         group.children = [cls.from_dict(child_data, group) for child_data in data.get("children", [])]
         group.tasks = [Task.from_dict(task_data) for task_data in data.get("tasks", [])]
@@ -107,15 +115,20 @@ class TaskGroup:
 
     def add_child(self, child_group):
         """添加子任务组"""
+        print(f"🔗 将 [{child_group.name}] 添加为 [{self.name}] 的子组")
         child_group.parent = self
         self.children.append(child_group)
 
     def find_group(self, group_name):
         """查找指定名称的任务组"""
+        print(f"🔍 查找任务组 [{group_name}] 在 [{self.name}] 中是否存在")
         if self.name == group_name:
+            print(f"🎯 找到任务组 [{group_name}]")
             return self
         for child in self.children:
             found = child.find_group(group_name)
             if found:
                 return found
+        print(f"❌ 未找到任务组 [{group_name}]")
         return None
+

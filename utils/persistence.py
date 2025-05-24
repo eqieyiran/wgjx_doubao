@@ -2,6 +2,7 @@
 
 import os
 import json
+from models.task_model import TaskGroup
 
 
 def save_task_groups(group_manager, file_path="tasks.json"):
@@ -23,7 +24,6 @@ def load_task_groups(file_path="tasks.json"):
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
-            from models.task_model import TaskGroup
             return TaskGroup.from_dict(data["root_group"])
     except Exception as e:
         print(f"加载失败: {e}")

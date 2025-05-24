@@ -23,63 +23,270 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("自动化任务辅助工具")
         self.resize(1200, 800)
 
-        self.task_executor = TaskExecutor()
-        self.task_executor.log_signal.connect(self.log_message)
-        self.task_executor.task_status_updated.connect(self.update_task_status)
+        print("✅ 初始化主窗口")
 
-        self.settings = QSettings("MyCompany", "AutoTaskHelper")
-        self.restore_window_state()
+        # 初始化 QSettings 和保存路径
+        self.settings = QSettings("MyCompany", "AutomationTool")  # 使用合适的组织名和应用名
+        self.current_save_path = "tasks.json"  # 默认保存路径
 
+        # 初始化任务组管理器
         loaded_group = load_task_groups()
+        print("✅ 加载配置文件中的任务组:", loaded_group)
         self.group_manager = GroupManager()
         if loaded_group:
             self.group_manager.root_group = loaded_group
+            print("✅ 成功加载已保存的任务组")
         else:
+            print("⚠️ 配置文件不存在，使用默认任务组")
             self._init_default_groups()
 
-        self.current_save_path = "tasks.json"  # 默认保存路径
-
-        self.group_panel = TaskGroupPanel(self.group_manager, self)
-        self.group_panel.itemClicked.connect(self.on_group_selected)
-
+        # 初始化 UI
         self.init_ui()
         self.setup_shortcuts()
-        self.update_task_list(self._get_all_tasks())
+
+        # 刷新任务列表
+        tasks = self._get_all_tasks()
+        print(f"📊 初始化时共加载 {len(tasks)} 个任务")
+        self.update_task_list(tasks)
 
     def _init_default_groups(self):
-        daily_group = self.group_manager.create_group("日常任务")
-        weekly_group = self.group_manager.create_group("周常任务")
+        daily = self.group_manager.create_group("日常任务")
+        weekly = self.group_manager.create_group("周常任务")
 
-        daily_group.tasks = [
-            Task(name="每日签到", task_type="click", parameters={"location": (100, 200)}, group="日常任务"),
+        daily.tasks = [
+            Task(name="每日签到", task_type="click", parameters={"location": [100, 200]}, group="日常任务"),
             Task(name="每日副本", task_type="match", parameters={"template": "daily.png"}, group="日常任务")
         ]
 
-        weekly_group.tasks = [
+        weekly.tasks = [
             Task(name="周常副本", task_type="match", parameters={"template": "weekly.png"}, group="周常任务"),
-            Task(name="周常挑战", task_type="click", parameters={"location": (300, 400)}, group="周常任务")
+            Task(name="周常挑战", task_type="click", parameters={"location": [300, 400]}, group="周常任务")
         ]
 
-    def restore_window_state(self):
-        if self.settings.contains("window/geometry"):
-            geometry = self.settings.value("window/geometry")
-            self.restoreGeometry(geometry)
+        print("✅ 默认任务组初始化完成")
+        for group in self.group_manager.get_all_groups():
+            print(f" - {group.name}：{len(group.tasks)} 个任务")
+
+    def _get_all_tasks(self):
+        def collect(group):
+            print(f"🔍 收集任务组 [{group.name}] 的任务（{len(group.tasks)} 个）")
+            tasks = group.tasks.copy()
+            for child in group.children:
+                print(f"👉 进入子组: {child.name}")
+                tasks.extend(collect(child))
+            return tasks
+
+        result = collect(self.group_manager.root_group)
+        print(f"📊 共计获取任务数量: {len(result)}")
+        return result
+
+    def update_task_list(self, tasks):
+        assert tasks is not None, "❌ 参数错误：tasks 不能为 None"
+        print("🔄 开始刷新任务列表...")
+        self.table_model.setRowCount(0)
+        for idx, task in enumerate(tasks):
+            print(f"📝 第 {idx + 1} 条任务:")
+            print(f"   ID: {task.id}")
+            print(f"   名称: {task.name}")
+            print(f"   状态: {task.status}")
+            print(f"   类型: {task.task_type}")
+            print(f"   分组: {task.group or '无'}")
+            items = [
+                QStandardItem(task.id),
+                QStandardItem(task.name),
+                QStandardItem(task.status),
+                QStandardItem(task.task_type),
+                QStandardItem(task.group or ""),
+                QStandardItem(str(task.retry_count))
+            ]
+            self.table_model.appendRow(items)
+        print(f"✅ 任务列表刷新完成，共显示 {len(tasks)} 条任务")
+
+    def show_task_context_menu(self, position):
+        """任务表格右键菜单"""
+        menu = QMenu(self.task_table)
+
+        edit_action = QAction("编辑任务", self)
+        delete_action = QAction("删除任务", self)
+
+        edit_action.triggered.connect(self._edit_selected_task)
+        delete_action.triggered.connect(self._delete_selected_task)
+
+        menu.addAction(edit_action)
+        menu.addAction(delete_action)
+
+        menu.exec_(self.task_table.viewport().mapToGlobal(position))
+
+    def _edit_selected_task(self):
+        """编辑当前选中的任务"""
+        proxy = self.task_table.model()
+        source = proxy.sourceModel()
+        indexes = self.task_table.selectedIndexes()
+
+        if not indexes:
+            print("❌ 编辑失败：未选中任何任务")
+            return
+
+        row = proxy.mapToSource(indexes[0]).row()
+        task_item = source.item(row, 0)
+
+        if not task_item:
+            print("❌ 获取任务失败：选中项为空")
+            return
+
+        task_id = task_item.text()
+        task = self.find_task_by_id(task_id)
+
+        if not task:
+            print(f"❌ 找不到对应的任务 ID: {task_id}")
+            return
+
+        try:
+            dialog = TaskEditDialog(self)
+            dialog.name_input.setText(task.name)
+            dialog.type_combo.setCurrentText(task.task_type)
+            dialog.group_combo.setCurrentText(task.group or "")
+            dialog.param_input.setText(str(task.parameters))
+
+            if dialog.exec_() == TaskEditDialog.Accepted:
+                import json
+                data = dialog.get_task_data()
+                params = json.loads(data["parameters"])
+
+                task.name = data["name"]
+                task.task_type = data["task_type"]
+                task.parameters = params
+                task.group = data["group"]
+
+                print(f"✅ 任务 [{task.name}] 已更新")
+                self.update_task_list(self._get_all_tasks())
+
+        except Exception as e:
+            print(f"❌ 更新任务失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _delete_selected_task(self):
+        """删除当前选中的任务"""
+        proxy = self.task_table.model()
+        source = proxy.sourceModel()
+        indexes = self.task_table.selectedIndexes()
+
+        if not indexes:
+            print("❌ 删除失败：未选中任何任务")
+            return
+
+        row = proxy.mapToSource(indexes[0]).row()
+        task_item = source.item(row, 0)
+
+        if not task_item:
+            print("❌ 获取任务失败：选中项为空")
+            return
+
+        task_id = task_item.text()
+        task = self.find_task_by_id(task_id)
+
+        if not task:
+            print(f"❌ 找不到对应的任务 ID: {task_id}")
+            return
+
+        group_name = task.group
+        if group_name:
+            self.group_manager.remove_task_from_group(group_name, task_id)
+            print(f"🗑️ 任务 [{task.name}] 已从分组 [{group_name}] 中删除")
+            self.update_task_list(self._get_all_tasks())
+
+    def apply_filters(self):
+        """根据状态筛选任务列表"""
+        selected_status = self.status_filter_combo.currentText()
+        all_tasks = self._get_all_tasks()
+        print(f"🔍 正在应用状态筛选: {selected_status}")
+
+        if selected_status == "全部状态":
+            filtered_tasks = all_tasks
         else:
-            screen = QApplication.primaryScreen().geometry()
-            x = (screen.width() - self.width()) // 2
-            y = (screen.height() - self.height()) // 2
-            self.move(x, y)
+            filtered_tasks = [task for task in all_tasks if task.status == selected_status]
+
+        print(f"📊 筛选后任务数量: {len(filtered_tasks)}")
+        self.update_task_list(filtered_tasks)
+
+    def start_task_execution(self):
+        """开始执行任务"""
+        if not self.task_executor.isRunning():
+            selected_group = self.group_combo.currentText()
+            print(f"▶️ 开始执行任务，目标分组: {selected_group}")
+            if selected_group == "全部分组":
+                tasks = self._get_all_tasks()
+            else:
+                tasks = self.group_manager.get_tasks_by_group(selected_group)
+            print(f"🎯 即将执行任务数: {len(tasks)}")
+            self.task_executor.set_tasks(tasks)
+            self.task_executor.start()
+
+    def stop_task_execution(self):
+        """停止任务执行"""
+        if self.task_executor.isRunning():
+            print("🛑 停止任务执行")
+            self.task_executor.stop()
+
+    def on_group_selected(self, item):
+        """当任务组被点击时触发"""
+        group_name = item.text(0)
+        print(f"📌 点击了任务组: {group_name}")
+
+        # 打印当前根任务组结构
+        print("🔍 当前根任务组结构:")
+
+        def _print_group_structure(group, indent=0):
+            print(f"{' ' * indent}📁 {group.name} ({len(group.tasks)}个任务)")
+            for child in group.children:
+                _print_group_structure(child, indent + 4)
+
+        _print_group_structure(self.group_manager.root_group)
+
+        # 获取当前分组的任务列表
+        tasks = self.group_manager.get_tasks_by_group(group_name)
+
+        # 打印返回的任务详情
+        print(f"📂 返回的任务列表 (共 {len(tasks)} 条):")
+        if not tasks:
+            print("⚠️ 该分组下没有任务")
+        else:
+            for t in tasks:
+                print(f" - {t.name} (ID: {t.id}, 分组: {t.group})")
+
+        # 刷新任务表格
+        self.update_task_list(tasks)
+
+    def log_message(self, level, message):
+        """接收并转发日志信息到日志面板"""
+        print(f"[{level}] {message}")
+        self.log_panel.log(level, message)
+
+    def find_task_by_id(self, task_id):
+        """查找指定ID的任务"""
+        all_tasks = self._get_all_tasks()
+        for task in all_tasks:
+            if task.id == task_id:
+                return task
+        print(f"❌ 未找到任务 ID: {task_id}")
+        return None
 
     def init_ui(self):
+        print("✅ 开始初始化主窗口 UI")
+
         main_widget = QWidget()
         self.setCentralWidget(main_widget)
         main_layout = QVBoxLayout()
 
         splitter = QSplitter(Qt.Horizontal)
 
+        # 左侧任务组面板
+        self.group_panel = TaskGroupPanel(self.group_manager, self)  # 初始化 group_panel
+        self.group_panel.itemClicked.connect(self.on_group_selected)  # ✅ 添加这一行
         group_frame = QFrame()
         group_frame.setLayout(QVBoxLayout())
-        group_frame.layout().addWidget(self.group_panel)
+        group_frame.layout().addWidget(self.group_panel)  # 添加 group_panel 到 layout
         group_frame.setFrameShape(QFrame.StyledPanel)
 
         control_layout = self._create_control_bar()
@@ -108,15 +315,18 @@ class MainWindow(QMainWindow):
         self.save_as_button.clicked.connect(self.save_current_groups_as)
         control_layout.addWidget(self.save_as_button)
 
+        # 加载样式表
         try:
             with open("resources/style.qss", "r", encoding="utf-8") as f:
                 self.setStyleSheet(f.read())
+            print("✅ 样式表加载成功")
         except Exception as e:
-            print(f"加载样式失败: {e}")
+            print(f"⚠️ 样式表加载失败: {e}")
 
         main_widget.setLayout(main_layout)
 
     def _create_control_bar(self):
+        print("✅ 创建控制栏")
         layout = QHBoxLayout()
 
         self.group_combo = QComboBox()
@@ -150,6 +360,7 @@ class MainWindow(QMainWindow):
         return layout
 
     def _create_task_table(self):
+        print("✅ 创建任务表格")
         table_view = TaskTableView(main_window=self)
         self.table_model = QStandardItemModel()
         self.table_model.setHorizontalHeaderLabels([
@@ -171,146 +382,12 @@ class MainWindow(QMainWindow):
         return table_view
 
     def setup_shortcuts(self):
+        print("✅ 设置快捷键 Ctrl+S / Ctrl+Shift+S")
         QShortcut(QKeySequence("Ctrl+S"), self, self.save_current_groups)
         QShortcut(QKeySequence("Ctrl+Shift+S"), self, self.save_current_groups_as)
 
-    def apply_filters(self):
-        selected_group = self.group_combo.currentText()
-        selected_status = self.status_filter_combo.currentText()
-
-        tasks = self._get_all_tasks()
-        filtered = []
-
-        for task in tasks:
-            match_group = selected_group == "全部分组" or task.group == selected_group
-            match_status = selected_status == "全部状态" or task.status == selected_status
-            if match_group and match_status:
-                filtered.append(task)
-
-        self.update_task_list(filtered)
-
-    def _get_all_tasks(self):
-        def collect(group):
-            tasks = list(group.tasks)
-            for child in group.children:
-                tasks.extend(collect(child))
-            return tasks
-
-        return collect(self.group_manager.root_group)
-
-    def on_group_selected(self, item, column):
-        selected_group = item.text(column)
-        if selected_group == "根任务组":
-            current_tasks = self._get_all_tasks()
-            self.update_task_list(current_tasks)
-        else:
-            tasks = self.group_manager.get_tasks_by_group(selected_group)
-            self.update_task_list(tasks)
-
-    def update_task_list(self, tasks):
-        self.table_model.removeRows(0, self.table_model.rowCount())
-
-        status_icons = {
-            "就绪": "🔄",
-            "运行中": "⏳",
-            "成功": "✅",
-            "失败": "❌"
-        }
-
-        for task in tasks:
-            status_text = task.status or "就绪"
-            icon = status_icons.get(status_text, "📝")
-
-            items = [
-                QStandardItem(task.id),
-                QStandardItem(task.name),
-                QStandardItem(f"{icon} {status_text}"),
-                QStandardItem(task.task_type),
-                QStandardItem(task.group or ""),
-                QStandardItem(str(task.retry_count)),
-            ]
-
-            if status_text == "成功":
-                items[2].setBackground(Qt.green)
-                items[2].setForeground(Qt.white)
-            elif status_text == "失败":
-                items[2].setBackground(Qt.red)
-                items[2].setForeground(Qt.white)
-            elif status_text == "运行中":
-                items[2].setBackground(Qt.yellow)
-            elif status_text == "就绪":
-                items[2].setBackground(QColor("#f0f0f0"))
-
-            self.table_model.appendRow(items)
-
-    def update_task_status(self, row):
-        proxy = self.task_table.model()
-        source = proxy.sourceModel()
-        index = proxy.mapToSource(proxy.index(row, 0))
-
-        task_item = source.item(index.row(), 0)
-        if not task_item:
-            return
-
-        task_id = task_item.text()
-        task = self.find_task_by_id(task_id)
-        if not task:
-            return
-
-        status_index = index.siblingAtColumn(2)
-        source.setData(status_index, f"{task.status}")
-
-    def log_message(self, level, message):
-        self.log_panel.log(level, message)
-
-    def find_task_by_id(self, task_id):
-        for group in self.group_manager.get_all_groups():
-            for task in group.tasks:
-                if task.id == task_id:
-                    return task
-        return None
-
-    def start_task_execution(self):
-        current_tasks = self._get_all_tasks()
-        self.task_executor = TaskExecutor()
-        self.task_executor.log_signal.connect(self.log_message)
-        self.task_executor.task_status_updated.connect(self.update_task_status)
-        self.task_executor.finished.connect(self.task_executor.deleteLater)
-
-        self.task_executor.set_tasks(current_tasks)
-        self.task_executor.start()
-
-    def stop_task_execution(self):
-        if self.task_executor.isRunning():
-            self.task_executor.stop()
-
-    def show_task_context_menu(self, position):
-        proxy = self.task_table.model()
-        source = proxy.sourceModel()
-        index = self.task_table.indexAt(position)
-        if not index.isValid():
-            return
-
-        row = proxy.mapToSource(index).row()
-        task_item = source.item(row, 0)
-        if not task_item:
-            return
-
-        menu = QMenu(self.task_table)
-        move_up = menu.addAction("⬆ 上移")
-        move_down = menu.addAction("⬇ 下移")
-        delete = menu.addAction("🗑 删除")
-
-        action = menu.exec_(self.task_table.viewport().mapToGlobal(position))
-
-        if action == move_up:
-            self.move_task_row(row, -1)
-        elif action == move_down:
-            self.move_task_row(row, +1)
-        elif action == delete:
-            self.delete_task_row(row)
-
     def on_task_double_clicked(self, index):
+        print("🔍 双击任务项")
         proxy = self.task_table.model()
         source = proxy.sourceModel()
         row = proxy.mapToSource(index).row()
@@ -323,16 +400,17 @@ class MainWindow(QMainWindow):
         task_id = task_item.text()
         task = self.find_task_by_id(task_id)
         if not task:
+            print("❌ 找不到对应的任务")
             return
 
-        dialog = TaskEditDialog(self)
-        dialog.name_input.setText(task.name)
-        dialog.type_combo.setCurrentText(task.task_type)
-        dialog.group_input.setText(task.group or "")
-        dialog.param_input.setText(str(task.parameters))
+        try:
+            dialog = TaskEditDialog(self)
+            dialog.name_input.setText(task.name)
+            dialog.type_combo.setCurrentText(task.task_type)
+            dialog.group_combo.setCurrentText(task.group or "")
+            dialog.param_input.setText(str(task.parameters))
 
-        if dialog.exec_() == TaskEditDialog.Accepted:
-            try:
+            if dialog.exec_() == TaskEditDialog.Accepted:
                 import json
                 data = dialog.get_task_data()
                 params = json.loads(data["parameters"])
@@ -343,133 +421,51 @@ class MainWindow(QMainWindow):
                 task.group = data["group"]
 
                 self.update_task_list(self._get_all_tasks())
-            except Exception as e:
-                print(f"❌ 更新任务失败: {e}")
 
-    def move_task_row(self, row, direction):
-        proxy_model = self.task_table.model()
-        source_model = proxy_model.sourceModel()
+        except Exception as e:
+            print(f"❌ 更新任务失败: {e}")
+            import traceback
+            traceback.print_exc()
 
-        if not (0 <= row < source_model.rowCount()):
-            return
-
-        task_item = source_model.item(row, 0)
-        target_row = row + direction
-        if not (0 <= target_row < source_model.rowCount()):
-            return
-
-        task_id = task_item.text()
-        task = self.find_task_by_id(task_id)
-        if not task or not task.group:
-            print("❌ 源或目标任务组为空")
-            return
-
-        group = self.group_manager.find_group_by_name(task.group)
-        if not group:
-            print("❌ 找不到对应的任务组")
-            return
-
-        tasks = group.tasks[:]
-        for i, t in enumerate(tasks):
-            if t.id == task_id:
-                moved_task = tasks.pop(i)
-                tasks.insert(i + direction, moved_task)
-                break
-
-        group.tasks = tasks
-        self.save_current_groups(force_dialog=False)
-        self.update_task_list(self._get_all_tasks())
-
-    def delete_task_row(self, row):
-        proxy_model = self.task_table.model()
-        source_model = proxy_model.sourceModel()
-        task_item = source_model.item(row, 0)
-
-        if not task_item:
-            return
-
-        task_id = task_item.text()
-        task = self.find_task_by_id(task_id)
-
-        if not task or not task.group:
-            print("❌ 源任务组为空")
-            return
-
-        # 从任务组中移除任务
-        success = self.group_manager.remove_task_from_group(task.group, task_id)
-        if success:
-            source_model.removeRow(row)
-            self.save_current_groups(force_dialog=False)
-            print(f"✅ 已删除任务 {task_id}")
+    def restore_window_state(self):
+        print("🔄 恢复窗口状态")
+        if self.settings.contains("window/geometry"):
+            geometry = self.settings.value("window/geometry")
+            self.restoreGeometry(geometry)
         else:
-            print(f"❌ 删除任务 {task_id} 失败")
+            screen = QApplication.primaryScreen().geometry()
+            x = (screen.width() - self.width()) // 2
+            y = (screen.height() - self.height()) // 2
+            self.move(x, y)
 
-    def _update_task_order_in_group(self, source_model):
-        updated_ids = [source_model.item(i, 0).text() for i in range(source_model.rowCount())]
-        print("更新后的任务顺序:", updated_ids)
+    def save_current_groups(self):
+        """保存当前任务组配置"""
+        try:
+            self.group_manager.save_to_file(self.current_save_path)
+            self.log_message("SUCCESS", "任务配置保存成功")
+        except Exception as e:
+            self.log_message("ERROR", f"保存任务配置失败: {e}")
+
+    def save_current_groups_as(self):
+        """另存为任务组配置"""
+        file_path, _ = QFileDialog.getSaveFileName(self, "保存任务配置", "", "JSON 文件 (*.json)")
+        if file_path:
+            try:
+                self.group_manager.save_to_file(file_path)
+                self.current_save_path = file_path
+                self.log_message("SUCCESS", f"任务配置另存为成功: {file_path}")
+            except Exception as e:
+                self.log_message("ERROR", f"保存任务配置失败: {e}")
 
     def closeEvent(self, event):
+        print("🚪 窗口关闭事件触发")
         try:
             save_task_groups(self.group_manager)
             self.settings.setValue("window/geometry", self.saveGeometry())
             event.accept()
         except Exception as e:
-            print(f"保存失败: {e}")
+            print(f"❌ 保存失败: {e}")
             event.ignore()
-
-    def save_current_groups(self, force_dialog=False):
-        if not force_dialog and self.current_save_path:
-            success = self.group_manager.save_to_file(self.current_save_path)
-            if success:
-                self.log_message("INFO", f"✅ 已自动保存至 {self.current_save_path}")
-            else:
-                self.log_message("ERROR", "❌ 自动保存失败")
-            return
-
-        path, _ = QFileDialog.getSaveFileName(self, "保存任务组", self.current_save_path, "JSON (*.json)")
-        if path:
-            self.current_save_path = path
-            success = self.group_manager.save_to_file(path)
-            if success:
-                self.log_message("INFO", f"✅ 已保存至 {path}")
-            else:
-                self.log_message("ERROR", "❌ 保存失败")
-
-    def save_current_groups_as(self):
-        path, _ = QFileDialog.getSaveFileName(self, "另存为", "", "JSON (*.json)")
-        if path:
-            success = self.group_manager.save_to_file(path)
-            if success:
-                self.log_message("INFO", f"✅ 已另存为 {path}")
-                self.current_save_path = path
-            else:
-                self.log_message("ERROR", "❌ 另存为失败")
-
-    def save_current_groups(self, force_dialog=False):
-        """
-        保存当前任务组（可选弹窗）
-        :param force_dialog: 是否强制弹出选择路径对话框
-        """
-        if not force_dialog and self.current_save_path:
-            success = self.group_manager.save_to_file(self.current_save_path)
-            if success:
-                self.log_message("INFO", f"✅ 已自动保存至 {self.current_save_path}")
-            else:
-                self.log_message("ERROR", "❌ 自动保存失败")
-            return
-
-        path, _ = QFileDialog.getSaveFileName(self, "保存任务组", self.current_save_path, "JSON (*.json)")
-        if path:
-            self.current_save_path = path
-            success = self.group_manager.save_to_file(path)
-            if success:
-                self.log_message("INFO", f"✅ 已保存至 {path}")
-            else:
-                self.log_message("ERROR", "❌ 保存失败")
-
-    def setup_shortcuts(self):
-        QShortcut(QKeySequence("Ctrl+S"), self, self.save_current_groups)
-        QShortcut(QKeySequence("Ctrl+Shift+S"), self, self.save_current_groups_as)
 
 
 class TaskTableView(QTableView):
@@ -483,8 +479,16 @@ class TaskTableView(QTableView):
         self.setDragDropMode(QTableView.InternalMove)
         self.setDefaultDropAction(Qt.MoveAction)
 
-    def dropEvent(self, event):
-        super().dropEvent(event)
-        current_index = self.currentIndex()
-        if current_index.isValid() and self.main_window:
-            self.main_window.move_task_row(current_index.row(), 0)
+
+# =======================
+# ✅ 调试启动入口
+# =======================
+
+if __name__ == "__main__":
+    import sys
+    from PyQt5.QtWidgets import QApplication
+
+    app = QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec_())
