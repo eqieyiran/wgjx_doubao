@@ -1,5 +1,5 @@
 # ui/main_window.py
-
+import logging
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QShortcut,
     QComboBox, QSlider, QCheckBox, QPushButton,
@@ -15,7 +15,8 @@ from ui.task_group_panel import TaskGroupPanel
 from utils.persistence import save_task_groups, load_task_groups
 from ui.task_edit_dialog import TaskEditDialog
 from engine.task_executor import TaskExecutor
-
+# 定义本模块专用 logger
+logger = logging.getLogger(__name__)
 
 class MainWindow(QMainWindow):
     def __init__(self):

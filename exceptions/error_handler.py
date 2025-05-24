@@ -1,43 +1,55 @@
-ERR_001 = "ERR_001"  # 模板图片不存在
-ERR_002 = "ERR_002"  # 屏幕坐标越界
-ERR_003 = "ERR_003"  # 时间窗口超时
+# exceptions/error_handler.py
 
+import logging
+
+# 设置本模块专用 logger
+logger = logging.getLogger(__name__)
 
 class TemplateNotFoundError(Exception):
-    pass
+    """当模板图片不存在时抛出该异常"""
+    def __init__(self, message="模板图片未找到"):
+        self.message = message
+        logger.error(f"[TemplateNotFoundError] {message}")
+        super().__init__(self.message)
 
 
 class CoordinateOutOfBoundsError(Exception):
-    pass
-
-
-class TaskTimeoutError(Exception):
-    pass
+    """当坐标超出屏幕范围时抛出该异常"""
+    def __init__(self, message="坐标超出屏幕边界"):
+        self.message = message
+        logger.error(f"[CoordinateOutOfBoundsError] {message}")
+        super().__init__(self.message)
 
 
 class ErrorHandler:
+    """
+    错误处理工具类，用于统一捕获、处理和记录错误
+    """
+
+    # 预设错误码常量
+    ERR_001 = "ERR_001: 模板匹配失败"
+    ERR_002 = "ERR_002: 坐标越界"
+    ERR_003 = "ERR_003: 任务执行超时"
+    ERR_004 = "ERR_004: 参数错误"
+
     @staticmethod
     def handle(error_code, **kwargs):
-        """统一异常处理"""
-        if error_code == ERR_001:
-            message = f"模板图片不存在: {kwargs.get('path', '未知路径')}"
-            print(f"[ERROR] {message}")
-            return {"error": error_code, "message": message}
-
-        elif error_code == ERR_002:
-            original = kwargs.get('original')
-            corrected = kwargs.get('corrected')
-            message = f"坐标越界修正: {original} -> {corrected}"
-            print(f"[WARNING] {message}")
-            return {"error": error_code, "message": message, "original": original, "corrected": corrected}
-
-        elif error_code == ERR_003:
-            group = kwargs.get('group')
-            message = f"任务组 '{group}' 超时终止"
-            print(f"[ERROR] {message}")
-            return {"error": error_code, "message": message, "group": group}
-
+        """
+        统一错误处理入口
+        :param error_code: 错误码，例如 ERR_002
+        :param kwargs: 可选参数，用于补充上下文信息
+        """
+        message = getattr(ErrorHandler, error_code, "未知错误")
+        if isinstance(message, str):
+            for key, value in kwargs.items():
+                message += f", {key}={value}"
+            logger.error(message)
         else:
-            message = f"未知错误: {error_code}"
-            print(f"[ERROR] {message}")
-            return {"error": error_code, "message": message}
+            logger.error(f"未知错误码: {error_code}")
+
+
+# 示例错误码常量导出（方便其他模块导入使用）
+ERR_001 = ErrorHandler.ERR_001
+ERR_002 = ErrorHandler.ERR_002
+ERR_003 = ErrorHandler.ERR_003
+ERR_004 = ErrorHandler.ERR_004

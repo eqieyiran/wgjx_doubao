@@ -1,9 +1,12 @@
 # models/task_model.py
-
+import logging
 import uuid
 from datetime import datetime
 from dateutil.parser import parse
 
+
+# 在每个 .py 文件开头定义自己的 logger
+logger = logging.getLogger(__name__)
 
 class Task:
     def __init__(
@@ -121,14 +124,13 @@ class TaskGroup:
 
     def find_group(self, group_name):
         """查找指定名称的任务组"""
-        print(f"🔍 查找任务组 [{group_name}] 在 [{self.name}] 中是否存在")
+        logger.debug(f"🔍 查找任务组 [{group_name}] 在 [{self.name}] 中是否存在")
         if self.name == group_name:
-            print(f"🎯 找到任务组 [{group_name}]")
+            logger.debug(f"🎯 找到任务组 [{group_name}]")
             return self
         for child in self.children:
             found = child.find_group(group_name)
             if found:
                 return found
-        print(f"❌ 未找到任务组 [{group_name}]")
+        logger.warning(f"❌ 未找到任务组 [{group_name}]")
         return None
-

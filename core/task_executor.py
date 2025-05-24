@@ -3,7 +3,7 @@ import random
 from utils.random_utils import random_click_offset, random_typing_delay
 from utils.coordinate_utils import adjust_coordinates
 from exceptions.error_handler import ErrorHandler, ERR_002
-
+from exceptions.error_handler import CoordinateOutOfBoundsError, ERR_002  # 替换掉之前的未定义错误
 
 class TaskExecutor:
     def __init__(self, random_offset=True, dynamic_delay=True):

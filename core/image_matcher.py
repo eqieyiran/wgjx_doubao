@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from utils.random_utils import random_delay
 from core.cache_manager import LRUCache
-
+from exceptions.error_handler import TemplateNotFoundError  # 添加这行导入
 
 class ImageMatcher:
     def __init__(self, threshold=0.8, scale_range=(0.5, 1.5), enable_random_delay=True):

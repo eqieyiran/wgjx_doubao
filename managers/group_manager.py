@@ -1,8 +1,9 @@
 # managers/group_manager.py
-
+import logging
 from models.task_model import TaskGroup
 from utils.persistence import save_task_groups
-
+# 定义本模块专用 logger
+logger = logging.getLogger(__name__)
 
 class GroupManager:
     def __init__(self):
@@ -126,4 +127,36 @@ class GroupManager:
         # 从父组中移除该子组
         parent.children = [g for g in parent.children if g.name != group_name]
         print(f"✅ 成功删除任务组 [{group_name}]")
+        return True
+
+    def move_group_to_new_parent(self, group_name, new_parent_name):
+        """
+        将指定的任务组移动到另一个任务组下
+        """
+        logger.info(f"尝试将任务组 [{group_name}] 移动到 [{new_parent_name}] 下")
+
+        group = self.find_group_by_name(group_name)
+        new_parent = self.find_group_by_name(new_parent_name)
+
+        if not group:
+            logger.error(f"❌ 找不到任务组 [{group_name}]")
+            return False
+        if not new_parent:
+            logger.error(f"❌ 找不到目标父组 [{new_parent_name}]")
+            return False
+
+        if group.name == "根任务组":
+            logger.error("❌ 根任务组不能被移动")
+            return False
+
+        # 先移除旧父组中的该子组
+        old_parent = group.parent
+        if old_parent:
+            old_parent.children = [g for g in old_parent.children if g.name != group_name]
+
+        # 添加到新父组中
+        new_parent.children.append(group)
+        group.parent = new_parent
+
+        logger.info(f"✅ 任务组 [{group_name}] 已成功移动到 [{new_parent_name}]")
         return True
