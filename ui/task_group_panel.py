@@ -1,7 +1,7 @@
 # ui/task_group_panel.py
-from PyQt5.QtCore import QSortFilterProxyModel  # 添加这行导入
+from PyQt5.QtCore import QSortFilterProxyModel
 import logging
-from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu, QAction, QComboBox
+from PyQt5.QtWidgets import QTreeWidget, QTreeWidgetItem, QMenu, QAction, QComboBox, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QDrag
 from utils.input_dialog import InputDialog
@@ -23,12 +23,13 @@ class TaskGroupPanel(QTreeWidget):
         self.setContextMenuPolicy(Qt.CustomContextMenu)
         self.customContextMenuRequested.connect(self.show_context_menu)
 
-        # 拖放设置
-        self.setAcceptDrops(True)
-        self.setDragEnabled(True)
-        self.setSelectionMode(QTreeWidget.SingleSelection)
-        self.setDropIndicatorShown(True)
-        self.setDragDropMode(QTreeWidget.InternalMove)
+        # 移除所有与拖放相关的设置
+        # 删除了以下配置：
+        # - setAcceptDrops
+        # - setDragEnabled
+        # - setSelectionMode
+        # - setDropIndicatorShown
+        # - setDragDropMode
 
         self.refresh()
 
@@ -60,47 +61,8 @@ class TaskGroupPanel(QTreeWidget):
 
         logger.debug(f"{group.name} 的子树构建完成")
 
-    def startDrag(self, supported_actions):
-        """开始拖动操作"""
-        logger.debug(f"触发拖动事件: 支持的操作={supported_actions}")
-        drag = QDrag(self)
-        mime_data = self.model().mimeData(self.selectedIndexes())
-        drag.setMimeData(mime_data)
-        drag.exec_(Qt.MoveAction)
-        logger.debug("拖动操作结束")
-
-    def dropEvent(self, event):
-        logger.info("开始处理拖放事件")
-
-        target_item = self.itemAt(event.pos())
-        if not target_item:
-            logger.warning("❌ 目标项无效")
-            return
-
-        target_group_name = target_item.text(0)
-        selected_indexes = self.selectedIndexes()
-        if not selected_indexes:
-            logger.warning("❌ 没有选择要移动的任务")
-            return
-
-        dragged_row = selected_indexes[0].row()
-        tasks = self.main_window._get_all_tasks()
-        if not tasks or dragged_row < 0 or dragged_row >= len(tasks):
-            logger.error("❌ 无法获取有效任务或行号超出范围")
-            return
-
-        dragged_task = tasks[dragged_row]
-        logger.debug(f"📎 正在移动任务: {dragged_task.name} ({dragged_task.id})")
-
-        success = self.main_window._move_selected_tasks_to_group(target_group_name, [dragged_task.id])
-
-        if success:
-            logger.info(f"✅ 任务 [{dragged_task.name}] 成功移动到 [{target_group_name}]")
-            self.main_window.update_task_list(
-                self.group_manager.get_tasks_by_group(target_group_name)
-            )
-        else:
-            logger.error(f"❌ 任务移动失败")
+    # 完全移除了 startDrag 和 dropEvent 方法
+    # 这两个方法负责处理拖放操作
 
     def move_task_between_groups(self, source_group, target_group, task_id):
         """实际执行任务在任务组之间的移动"""
@@ -111,32 +73,37 @@ class TaskGroupPanel(QTreeWidget):
 
         if not source_group_obj:
             logger.error(f"源任务组 [{source_group}] 不存在")
-            return
+            return False
         if not target_group_obj:
             logger.error(f"目标任务组 [{target_group}] 不存在")
-            return
+            return False
 
         moved = False
-        for task in source_group_obj.tasks:
+        for i, task in enumerate(source_group_obj.tasks):
             if task.id == task_id:
                 logger.info(f"找到任务 [{task.name}], 准备移动")
-                source_group_obj.tasks.remove(task)
-                target_group_obj.tasks.append(task)
 
-                # 确保任务的group属性正确
-                task.group = target_group
+                # 从源组移除任务
+                moved_task = source_group_obj.tasks.pop(i)
+
+                # 更新任务的分组属性
+                moved_task.group = target_group
+
+                # 添加到目标组
+                target_group_obj.tasks.append(moved_task)
+
+                # 保持任务顺序
+                target_group_obj.tasks.sort(key=lambda t: getattr(t, 'order', 0))
+
                 moved = True
                 break
 
         if moved:
             logger.info(f"任务 [{task_id}] 已成功移动到 [{target_group}]")
-
-            # 强制刷新两个分组的任务列表
-            self.main_window.update_task_list(
-                self.group_manager.get_tasks_by_group(target_group)
-            )
+            return True
         else:
             logger.warning(f"任务 [{task_id}] 在 [{source_group}] 中未找到")
+            return False
 
     def on_move_to_group(self, target_group_name, task_ids):
         logger.info(f"用户请求将任务 {task_ids} 移动到分组 [{target_group_name}]")
@@ -166,12 +133,13 @@ class TaskGroupPanel(QTreeWidget):
                 if task.id == task_id:
                     try:
                         moved_task = source_group.tasks.pop(i)
-                        moved_tasks.append(moved_task)
 
-                        # 确保任务的group属性正确更新
+                        # 更新任务的分组属性
                         moved_task.group = target_group_name
 
+                        moved_tasks.append(moved_task)
                         logger.info(f"✅ 任务 [{task_id}] 已从 [{source_group_name}] 移出")
+
                         found = True
                         break
                     except IndexError:
@@ -182,18 +150,18 @@ class TaskGroupPanel(QTreeWidget):
                 logger.warning(f"⚠️ 任务 [{task_id}] 在 [{source_group_name}] 中未找到")
 
         if moved_tasks:
-            # 清空目标分组并添加新任务
-            target_group.tasks = []
+            # 将任务添加到目标组，保留原有任务并维护顺序
             target_group.tasks.extend(moved_tasks)
 
-            # 确保所有任务的group属性正确
-            for task in moved_tasks:
-                task.group = target_group_name
+            # 重新排序目标组任务
+            target_group.tasks.sort(key=lambda t: getattr(t, 'order', 0))
 
-            logger.info(f"✅ 共 {len(moved_tasks)} 个任务已移动至 [{target_group_name}]")
+            # 强制刷新两个分组的任务列表
             self.main_window.update_task_list(
                 self.group_manager.get_tasks_by_group(target_group_name)
             )
+
+            logger.info(f"✅ 共 {len(moved_tasks)} 个任务已移动至 [{target_group_name}]")
             return True
 
         logger.warning("⚠️ 没有任务被移动")
@@ -228,8 +196,6 @@ class TaskGroupPanel(QTreeWidget):
         # 显示菜单并处理选择
         action = menu.exec_(self.viewport().mapToGlobal(position))
 
-
-
     def _find_source_group_name(self, task_id):
         """查找任务所属的任务组名"""
         for group in self.group_manager.get_all_groups():
@@ -242,8 +208,6 @@ class TaskGroupPanel(QTreeWidget):
     def on_delete_group(self, group_name):
         """删除任务组的回调函数"""
         logger.info(f"用户请求删除任务组: {group_name}")
-
-        from PyQt5.QtWidgets import QMessageBox
 
         reply = QMessageBox.question(
             self,

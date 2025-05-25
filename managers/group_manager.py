@@ -128,4 +128,3 @@ class GroupManager:
         parent.children = [g for g in parent.children if g.name != group_name]
         print(f"✅ 成功删除任务组 [{group_name}]")
         return True
-

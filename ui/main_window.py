@@ -226,56 +226,17 @@ class MainWindow(QMainWindow):
         table_view.setContextMenuPolicy(Qt.CustomContextMenu)  # 自定义右键菜单
         table_view.customContextMenuRequested.connect(self.show_task_context_menu)  # 绑定右键事件
         table_view.doubleClicked.connect(self.on_task_double_clicked)  # 双击编辑任务
-        table_view.setDragEnabled(True)
-        table_view.setAcceptDrops(True)
-        table_view.setDropIndicatorShown(True)
-        table_view.setDragDropMode(QTableView.InternalMove)
-        table_view.viewport().setAcceptDrops(True)
-        table_view.setSortingEnabled(False)
 
-        # 连接拖放事件
-        table_view.model().rowsMoved.connect(self.handle_rows_moved)
+        # 移除所有与拖放相关的设置
+        # 删除了以下配置：
+        # - setDragEnabled
+        # - setAcceptDrops
+        # - setDropIndicatorShown
+        # - setDragDropMode
+        # - viewport().setAcceptDrops
+        # - model().rowsMoved.connect
 
         return table_view
-
-    def handle_rows_moved(self, parent, start, end):
-        logger.info(f"✅ 行移动: 从 {start} 到 {end}")
-
-        proxy = self.task_table.model()
-        source = proxy.sourceModel()
-
-        moved_tasks = []
-
-        for row in range(source.rowCount()):
-            task_item = source.item(row, 0)
-            if task_item:
-                task_id = task_item.text()
-                task = self.find_task_by_id(task_id)
-                if task:
-                    task.order = row
-                    moved_tasks.append(task)
-                    logger.debug(f"📝 更新任务 [{task.name}] 的序号为 {row}")
-
-        current_group = self.group_panel.current_group
-        if current_group:
-            current_group.tasks.clear()
-            sorted_tasks = sorted(moved_tasks, key=lambda t: getattr(t, 'order', 0))
-            for task in sorted_tasks:
-                current_group.tasks.append(task)
-                task.group = current_group.name
-            updated_tasks = self.group_manager.get_tasks_by_group(current_group.name)
-            self.update_task_list(updated_tasks)
-        else:
-            self.update_task_list(self._get_all_tasks())
-
-        new_orders = [(task.id, task.group, task.order) for task in moved_tasks]
-        old_orders = [(task.id, task.group, getattr(task, 'original_order', task.order)) for task in moved_tasks]
-
-        for task in moved_tasks:
-            if not hasattr(task, 'original_order'):
-                task.original_order = task.order
-
-        self.undo_stack.push(TaskOrderCommand(self.group_manager, old_orders, new_orders))
 
     def update_task_list(self, tasks=None):
         """刷新任务列表"""
@@ -323,17 +284,17 @@ class MainWindow(QMainWindow):
         edit_action = QAction("编辑任务", self)
         delete_action = QAction("删除任务", self)
         move_to_group_action = QAction("移动到其他任务组", self)
-        set_order_action = QAction("设置序号", self)  # 新增选项
+        set_order_action = QAction("设置序号", self)
 
         edit_action.triggered.connect(self._edit_selected_task)
         delete_action.triggered.connect(self._delete_selected_task)
         move_to_group_action.triggered.connect(lambda: self._move_selected_tasks_to_group())
-        set_order_action.triggered.connect(self._set_custom_order)  # 新增选项连接
+        set_order_action.triggered.connect(self._set_custom_order)
 
         menu.addAction(edit_action)
         menu.addAction(delete_action)
         menu.addAction(move_to_group_action)
-        menu.addAction(set_order_action)  # 添加新选项
+        menu.addAction(set_order_action)
 
         menu.exec_(self.task_table.viewport().mapToGlobal(position))
 
@@ -478,7 +439,7 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         print("🚪 窗口关闭事件触发")
         try:
-            save_task_groups(self.group_manager)
+            self.group_manager.save_to_file()
             self.settings.setValue("window/geometry", self.saveGeometry())
             event.accept()
         except Exception as e:
