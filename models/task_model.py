@@ -8,6 +8,7 @@ from dateutil.parser import parse
 # 在每个 .py 文件开头定义自己的 logger
 logger = logging.getLogger(__name__)
 
+
 class Task:
     def __init__(
         self, tid=None, name="", task_type="", parameters=None,
@@ -23,19 +24,18 @@ class Task:
         self.timeout = timeout
         self.backup_tasks = backup_tasks or []
         self.status = status
-        self.id = self.tid
         self.created_at = datetime.now()
         self.started_at = None
         self.completed_at = None
-        print(f"✅ 创建任务 [{self.name}] (ID: {self.id}), 类型: {self.task_type}, 分组: {self.group}")
+        self.order = 0
+        self.id = self.tid  # 兼容性保留
 
     @staticmethod
     def generate_unique_id():
-        return str(uuid.uuid4())[:8]
+        """生成唯一任务ID"""
+        return str(uuid.uuid4())
 
     def to_dict(self):
-        """将任务序列化为字典"""
-        print(f"💾 任务 [{self.name}] 序列化")
         return {
             "tid": self.tid,
             "name": self.name,
@@ -48,13 +48,11 @@ class Task:
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
-            "order": getattr(self, "order", 0),  # 新增字段
+            "order": self.order
         }
 
     @classmethod
     def from_dict(cls, data):
-        """从字典恢复任务对象"""
-        print(f"🔄 恢复任务 [{data.get('name', '未知')}], ID: {data.get('tid')}")
         task = cls(
             tid=data.get("tid"),
             name=data.get("name", ""),
@@ -63,10 +61,10 @@ class Task:
             group=data.get("group"),
             retry_count=data.get("retry_count", 3),
             status=data.get("status", "就绪"),
-            timeout=data.get("timeout", 30),
-            backup_tasks=data.get("backup_tasks", [])
+            timeout=data.get("timeout", 30)
         )
 
+        # 时间戳处理
         created_at_str = data.get("created_at")
         if created_at_str:
             try:
@@ -84,24 +82,23 @@ class Task:
         if completed_at_str:
             task.completed_at = parse(completed_at_str)
 
+        task.order = data.get("order", 0)
         return task
 
 
 class TaskGroup:
     def __init__(self, name, parent=None):
-        self.id = f"group_{hash(self)}"  # 唯一标识符
+        self.id = f"group_{hash(self)}"
         self.name = name
         self.parent = parent
-        self.children = []  # 子任务组
-        self.tasks = []     # 当前组下的任务
-        self.execution_rule = "continue"  # 执行规则（continue/skip_on_fail）
+        self.children = []
+        self.tasks = []
+        self.execution_rule = "continue"
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
-        print(f"✅ 创建任务组 [{self.name}], ID: {self.id}")
 
     def to_dict(self):
         """将 TaskGroup 对象序列化为字典"""
-        print(f"💾 任务组 [{self.name}] 序列化")
         return {
             "name": self.name,
             "children": [child.to_dict() for child in self.children],
@@ -109,20 +106,26 @@ class TaskGroup:
         }
 
     @classmethod
-    def from_dict(cls, data, parent=None):
-        """从字典恢复 TaskGroup 对象"""
-        print(f"🔄 恢复任务组 [{data['name']}]")
-        group = cls(data["name"], parent)
+    def from_dict(cls, data):
+        """从字典恢复任务对象"""
+        if not data:
+            return None
 
-        if "children" in data and isinstance(data["children"], list):
-            group.children = [cls.from_dict(child_data, group) for child_data in data["children"]]
-        else:
-            print(f"⚠️ 任务组 [{data['name']}] 的 children 数据无效")
+        group = cls(name=data.get("name", ""))
 
-        if "tasks" in data and isinstance(data["tasks"], list):
-            group.tasks = [Task.from_dict(task_data) for task_data in data["tasks"]]
+        # 处理时间戳
+        created_at_str = data.get("created_at")
+        if created_at_str:
+            try:
+                group.created_at = parse(created_at_str)
+            except Exception:
+                group.created_at = datetime.now()
         else:
-            print(f"⚠️ 任务组 [{data['name']}] 的 tasks 数据无效")
+            group.created_at = datetime.now()
+
+        # 初始化子组和任务
+        group.children = [cls.from_dict(child_data) for child_data in data.get("children", [])]
+        group.tasks = [Task.from_dict(task_data) for task_data in data.get("tasks", [])]
 
         return group
 

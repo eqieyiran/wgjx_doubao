@@ -5,11 +5,11 @@ from PyQt5.QtCore import Qt
 
 
 class TaskEditDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, main_window=None):
         super().__init__(parent)
+        self.main_window = main_window or parent  # 确保 main_window 存在
         self.setWindowTitle("新建/编辑任务")
         self.task_data = None
-        self.group_combo = None  # 提前声明
         self.init_ui()
 
     def init_ui(self):

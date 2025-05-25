@@ -70,30 +70,37 @@ class TaskGroupPanel(QTreeWidget):
         logger.debug("拖动操作结束")
 
     def dropEvent(self, event):
-        proxy = self.model()
-        index = proxy.mapToSource(proxy.indexAt(event.pos()))
-        if not index.isValid():
+        logger.info("开始处理拖放事件")
+
+        target_item = self.itemAt(event.pos())
+        if not target_item:
+            logger.warning("❌ 目标项无效")
             return
 
-        dragged_row = index.row()
+        target_group_name = target_item.text(0)
+        selected_indexes = self.selectedIndexes()
+        if not selected_indexes:
+            logger.warning("❌ 没有选择要移动的任务")
+            return
+
+        dragged_row = selected_indexes[0].row()
         tasks = self.main_window._get_all_tasks()
-
-        if dragged_row < 0 or dragged_row >= len(tasks):
+        if not tasks or dragged_row < 0 or dragged_row >= len(tasks):
+            logger.error("❌ 无法获取有效任务或行号超出范围")
             return
 
-        dragged_task = tasks.pop(dragged_row)
-        dropped_row = index.row()
-        tasks.insert(dropped_row, dragged_task)
+        dragged_task = tasks[dragged_row]
+        logger.debug(f"📎 正在移动任务: {dragged_task.name} ({dragged_task.id})")
 
-        # 更新所有任务顺序
-        for group in self.main_window.group_manager.get_all_groups():
-            group.tasks = [t for t in group.tasks if t.id in [task.id for task in tasks]]
+        success = self.main_window._move_selected_tasks_to_group(target_group_name, [dragged_task.id])
 
-        for task in tasks:
-            task.order = tasks.index(task)
-
-        self.main_window.update_task_list(tasks)
-        self.main_window.log_message("INFO", f"✅ 任务顺序已更新")
+        if success:
+            logger.info(f"✅ 任务 [{dragged_task.name}] 成功移动到 [{target_group_name}]")
+            self.main_window.update_task_list(
+                self.group_manager.get_tasks_by_group(target_group_name)
+            )
+        else:
+            logger.error(f"❌ 任务移动失败")
 
     def move_task_between_groups(self, source_group, target_group, task_id):
         """实际执行任务在任务组之间的移动"""
@@ -115,17 +122,82 @@ class TaskGroupPanel(QTreeWidget):
                 logger.info(f"找到任务 [{task.name}], 准备移动")
                 source_group_obj.tasks.remove(task)
                 target_group_obj.tasks.append(task)
+
+                # 确保任务的group属性正确
                 task.group = target_group
                 moved = True
                 break
 
         if moved:
             logger.info(f"任务 [{task_id}] 已成功移动到 [{target_group}]")
+
+            # 强制刷新两个分组的任务列表
             self.main_window.update_task_list(
                 self.group_manager.get_tasks_by_group(target_group)
             )
         else:
             logger.warning(f"任务 [{task_id}] 在 [{source_group}] 中未找到")
+
+    def on_move_to_group(self, target_group_name, task_ids):
+        logger.info(f"用户请求将任务 {task_ids} 移动到分组 [{target_group_name}]")
+
+        if not task_ids or not target_group_name:
+            logger.warning("⚠️ 参数错误：task_ids 或 target_group_name 为空")
+            return False
+
+        target_group = self.group_manager.find_group_by_name(target_group_name)
+        if not target_group:
+            logger.error(f"❌ 目标分组不存在: {target_group_name}")
+            return False
+
+        moved_tasks = []
+
+        for task_id in task_ids:
+            source_group_name = self._find_source_group_name(task_id)
+            if not source_group_name:
+                continue
+
+            source_group = self.group_manager.find_group_by_name(source_group_name)
+            if not source_group or not hasattr(source_group, 'tasks'):
+                continue
+
+            found = False
+            for i, task in enumerate(source_group.tasks):
+                if task.id == task_id:
+                    try:
+                        moved_task = source_group.tasks.pop(i)
+                        moved_tasks.append(moved_task)
+
+                        # 确保任务的group属性正确更新
+                        moved_task.group = target_group_name
+
+                        logger.info(f"✅ 任务 [{task_id}] 已从 [{source_group_name}] 移出")
+                        found = True
+                        break
+                    except IndexError:
+                        logger.exception(f"❌ 删除任务 [{task_id}] 时索引越界")
+                        break
+
+            if not found:
+                logger.warning(f"⚠️ 任务 [{task_id}] 在 [{source_group_name}] 中未找到")
+
+        if moved_tasks:
+            # 清空目标分组并添加新任务
+            target_group.tasks = []
+            target_group.tasks.extend(moved_tasks)
+
+            # 确保所有任务的group属性正确
+            for task in moved_tasks:
+                task.group = target_group_name
+
+            logger.info(f"✅ 共 {len(moved_tasks)} 个任务已移动至 [{target_group_name}]")
+            self.main_window.update_task_list(
+                self.group_manager.get_tasks_by_group(target_group_name)
+            )
+            return True
+
+        logger.warning("⚠️ 没有任务被移动")
+        return False
 
     def show_context_menu(self, position):
         """显示右键菜单"""
@@ -156,59 +228,7 @@ class TaskGroupPanel(QTreeWidget):
         # 显示菜单并处理选择
         action = menu.exec_(self.viewport().mapToGlobal(position))
 
-    def on_move_to_group(self, target_group_name, task_ids):
-        """将多个任务移动到指定分组"""
-        logger.info(f"用户请求将任务 {task_ids} 移动到分组 [{target_group_name}]")
 
-        if not task_ids or not target_group_name:
-            logger.warning("⚠️ 参数错误：task_ids 或 target_group_name 为空")
-            return False
-
-        target_group = self.group_manager.find_group_by_name(target_group_name)
-        if not target_group:
-            logger.error(f"❌ 目标分组不存在: {target_group_name}")
-            return False
-
-        moved_tasks = []
-
-        for task_id in task_ids:
-            source_group_name = self._find_source_group_name(task_id)
-            if not source_group_name:
-                continue
-
-            source_group = self.group_manager.find_group_by_name(source_group_name)
-            if not source_group or not hasattr(source_group, 'tasks'):
-                continue
-
-            found = False
-            for i, task in enumerate(source_group.tasks):
-                if task.id == task_id:
-                    try:
-                        moved_task = source_group.tasks.pop(i)
-                        moved_tasks.append(moved_task)
-                        logger.info(f"✅ 任务 [{task_id}] 已从 [{source_group_name}] 移出")
-                        found = True
-                        break
-                    except IndexError:
-                        logger.exception(f"❌ 删除任务 [{task_id}] 时索引越界")
-                        break
-
-            if not found:
-                logger.warning(f"⚠️ 任务 [{task_id}] 在 [{source_group_name}] 中未找到")
-
-        if moved_tasks:
-            target_group.tasks.extend(moved_tasks)
-            for task in moved_tasks:
-                task.group = target_group_name
-
-            logger.info(f"✅ 共 {len(moved_tasks)} 个任务已移动至 [{target_group_name}]")
-            self.main_window.update_task_list(
-                self.group_manager.get_tasks_by_group(target_group_name)
-            )
-            return True
-
-        logger.warning("⚠️ 没有任务被移动")
-        return False
 
     def _find_source_group_name(self, task_id):
         """查找任务所属的任务组名"""

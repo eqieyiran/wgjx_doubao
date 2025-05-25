@@ -62,6 +62,9 @@ class GroupManager:
         print(f"📝 设置任务组 [{group_name}] 的任务")
         group = self.find_group_by_name(group_name)
         if group:
+            for idx, task in enumerate(tasks):
+                task.group = group_name
+                task.order = idx  # 更新任务的序号
             group.tasks = tasks
             print(f"✅ 成功设置任务组 [{group_name}] 的任务数量: {len(tasks)}")
             return True
@@ -74,6 +77,7 @@ class GroupManager:
         group = self.find_group_by_name(group_name)
         if group:
             task.group = group_name
+            task.order = len(group.tasks)  # 新增代码
             group.tasks.append(task)
             print(f"✅ 任务 [{task.name}] 已加入 [{group_name}]")
             return True
@@ -119,10 +123,6 @@ class GroupManager:
         if not parent:
             print(f"❌ 无法删除 [{group_name}]：没有父组")
             return False
-
-        # 删除该组下的所有任务（可选）
-        print(f"🧹 清空任务组 [{group_name}] 中的 {len(group.tasks)} 个任务")
-        group.tasks.clear()
 
         # 从父组中移除该子组
         parent.children = [g for g in parent.children if g.name != group_name]
