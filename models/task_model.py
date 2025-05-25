@@ -47,7 +47,8 @@ class Task:
             "status": self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "order": getattr(self, "order", 0),  # 新增字段
         }
 
     @classmethod
@@ -112,8 +113,17 @@ class TaskGroup:
         """从字典恢复 TaskGroup 对象"""
         print(f"🔄 恢复任务组 [{data['name']}]")
         group = cls(data["name"], parent)
-        group.children = [cls.from_dict(child_data, group) for child_data in data.get("children", [])]
-        group.tasks = [Task.from_dict(task_data) for task_data in data.get("tasks", [])]
+
+        if "children" in data and isinstance(data["children"], list):
+            group.children = [cls.from_dict(child_data, group) for child_data in data["children"]]
+        else:
+            print(f"⚠️ 任务组 [{data['name']}] 的 children 数据无效")
+
+        if "tasks" in data and isinstance(data["tasks"], list):
+            group.tasks = [Task.from_dict(task_data) for task_data in data["tasks"]]
+        else:
+            print(f"⚠️ 任务组 [{data['name']}] 的 tasks 数据无效")
+
         return group
 
     def add_child(self, child_group):

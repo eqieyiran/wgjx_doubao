@@ -38,8 +38,7 @@ class TaskEditDialog(QDialog):
 
         # 动态加载所有任务组
         try:
-            main_window = self.parent().main_window
-            for group in main_window.group_manager.get_all_groups():
+            for group in self.main_window.group_manager.get_all_groups():
                 if group.name != "根任务组":  # 避免重复添加
                     self.group_combo.addItem(group.name)
         except Exception as e:

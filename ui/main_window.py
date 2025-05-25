@@ -15,6 +15,7 @@ from ui.task_group_panel import TaskGroupPanel
 from utils.persistence import save_task_groups, load_task_groups
 from ui.task_edit_dialog import TaskEditDialog
 from engine.task_executor import TaskExecutor
+
 # 定义本模块专用 logger
 logger = logging.getLogger(__name__)
 
@@ -109,12 +110,15 @@ class MainWindow(QMainWindow):
 
         edit_action = QAction("编辑任务", self)
         delete_action = QAction("删除任务", self)
+        move_to_group_action = QAction("移动到其他任务组", self)  # 新增选项
 
         edit_action.triggered.connect(self._edit_selected_task)
         delete_action.triggered.connect(self._delete_selected_task)
+        move_to_group_action.triggered.connect(lambda: self._move_selected_tasks_to_group())
 
         menu.addAction(edit_action)
         menu.addAction(delete_action)
+        menu.addAction(move_to_group_action)  # 添加新选项
 
         menu.exec_(self.task_table.viewport().mapToGlobal(position))
 
@@ -239,25 +243,33 @@ class MainWindow(QMainWindow):
         print("🔍 当前根任务组结构:")
 
         def _print_group_structure(group, indent=0):
-            print(f"{' ' * indent}📁 {group.name} ({len(group.tasks)}个任务)")
-            for child in group.children:
-                _print_group_structure(child, indent + 4)
+            try:
+                print(f"{' ' * indent}📁 {group.name} ({len(group.tasks)}个任务)")
+                for child in group.children:
+                    _print_group_structure(child, indent + 4)
+            except Exception as e:
+                print(f"❌ 打印结构时发生错误: {e}")
 
         _print_group_structure(self.group_manager.root_group)
 
         # 获取当前分组的任务列表
-        tasks = self.group_manager.get_tasks_by_group(group_name)
+        try:
+            tasks = self.group_manager.get_tasks_by_group(group_name)
 
-        # 打印返回的任务详情
-        print(f"📂 返回的任务列表 (共 {len(tasks)} 条):")
-        if not tasks:
-            print("⚠️ 该分组下没有任务")
-        else:
-            for t in tasks:
-                print(f" - {t.name} (ID: {t.id}, 分组: {t.group})")
+            # 打印返回的任务详情
+            print(f"📂 返回的任务列表 (共 {len(tasks)} 条):")
+            if not tasks:
+                print("⚠️ 该分组下没有任务")
+            else:
+                for t in tasks:
+                    print(f" - {t.name} (ID: {t.id}, 分组: {t.group})")
 
-        # 刷新任务表格
-        self.update_task_list(tasks)
+            # 刷新任务表格
+            self.update_task_list(tasks)
+        except Exception as e:
+            print(f"❌ 处理任务组 [{group_name}] 时发生错误: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     def log_message(self, level, message):
         """接收并转发日志信息到日志面板"""
@@ -361,24 +373,34 @@ class MainWindow(QMainWindow):
         return layout
 
     def _create_task_table(self):
+        """创建任务表格"""
         print("✅ 创建任务表格")
-        table_view = TaskTableView(main_window=self)
+
+        # 使用标准 QTableView
+        table_view = QTableView()
+
+        # 初始化数据模型
         self.table_model = QStandardItemModel()
         self.table_model.setHorizontalHeaderLabels([
             "ID", "名称", "状态", "操作类型", "分组", "重试次数"
         ])
 
+        # 设置代理模型用于排序和过滤
         proxy_model = QSortFilterProxyModel()
         proxy_model.setSourceModel(self.table_model)
         table_view.setModel(proxy_model)
 
+        # 设置表头自动拉伸填充
         header = table_view.horizontalHeader()
         for i in range(self.table_model.columnCount()):
             header.setSectionResizeMode(i, QHeaderView.Stretch)
 
-        table_view.setContextMenuPolicy(Qt.CustomContextMenu)
-        table_view.customContextMenuRequested.connect(self.show_task_context_menu)
-        table_view.doubleClicked.connect(self.on_task_double_clicked)
+        # 设置表格行为
+        table_view.setSelectionBehavior(QTableView.SelectRows)  # 按行选中
+        table_view.setSelectionMode(QTableView.MultiSelection)  # 支持多选
+        table_view.setContextMenuPolicy(Qt.CustomContextMenu)  # 自定义右键菜单
+        table_view.customContextMenuRequested.connect(self.show_task_context_menu)  # 绑定右键事件
+        table_view.doubleClicked.connect(self.on_task_double_clicked)  # 双击编辑任务
 
         return table_view
 
@@ -468,28 +490,45 @@ class MainWindow(QMainWindow):
             print(f"❌ 保存失败: {e}")
             event.ignore()
 
+    def _move_selected_tasks_to_group(self):
+        """将选中的多个任务移动到其他任务组"""
+        proxy = self.task_table.model()
+        source = proxy.sourceModel()
+        indexes = self.task_table.selectedIndexes()
 
-class TaskTableView(QTableView):
-    def __init__(self, main_window=None):
-        super().__init__(main_window)
-        self.main_window = main_window
+        if not indexes:
+            print("❌ 移动失败：未选中任何任务")
+            return
 
-        self.setDragEnabled(True)
-        self.setAcceptDrops(True)
-        self.setDropIndicatorShown(True)
-        self.setDragDropMode(QTableView.InternalMove)
-        self.setDefaultDropAction(Qt.MoveAction)
+        # 提取所有选中任务的 ID
+        selected_rows = set(proxy.mapToSource(index).row() for index in indexes)
+        task_ids = []
 
+        for row in selected_rows:
+            task_item = source.item(row, 0)
+            if task_item:
+                task_id = task_item.text()
+                task = self.find_task_by_id(task_id)
+                if task:
+                    task_ids.append(task_id)
 
-# =======================
-# ✅ 调试启动入口
-# =======================
+        if not task_ids:
+            print("❌ 没有可移动的任务")
+            return
 
-if __name__ == "__main__":
-    import sys
-    from PyQt5.QtWidgets import QApplication
+        # 弹出对话框选择目标分组
+        from PyQt5.QtWidgets import QInputDialog
+        target_group, ok = QInputDialog.getItem(
+            self,
+            "选择目标任务组",
+            "请选择要移动到的任务组:",
+            [group.name for group in self.group_manager.get_all_groups()],
+            editable=False
+        )
 
-    app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec_())
+        if ok and target_group:
+            moved = self.group_panel.on_move_to_group(target_group, task_ids)
+            if moved:
+                print(f"✅ 共 {len(task_ids)} 个任务已成功移动到 [{target_group}]")
+            else:
+                print(f"⚠️ 移动失败或没有任务被移动")
